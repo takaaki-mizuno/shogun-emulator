@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  test:
+    name: テスト (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # モジュールとビルドのキャッシュは setup-go が扱う
+          cache: true
+          # go.sum は依存モジュールを追加するまで存在しない。
+          # 両方を挙げることで、片方だけでもキャッシュキーを作れる。
+          cache-dependency-path: |
+            go.mod
+            go.sum
+
+      # Fyne は cgo で OpenGL と X11 を使う。Linux のランナーには
+      # 開発用ヘッダが入っていないため導入する。
+      - name: Linux の依存パッケージを導入する
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxxf86vm-dev xorg-dev p7zip-full
+
+      # holy-mapperel の書庫を展開するために 7z を使う
+      - name: macOS の依存パッケージを導入する
+        if: runner.os == 'macOS'
+        run: brew install p7zip
+
+      # テスト ROM はリポジトリに含めない。取得結果をキャッシュする。
+      # キーに取得スクリプトとハッシュ表を含めることで、取得対象が
+      # 変わったときだけ取り直す。
+      - name: テスト ROM のキャッシュ
+        id: rom-cache
+        uses: actions/cache@v4
+        with:
+          path: testdata/roms
+          key: test-roms-${{ hashFiles('tools/fetch-test-roms/**', 'testdata/golden/romhashes.json') }}
+
+      - name: テスト ROM を取得する
+        run: go run ./tools/fetch-test-roms
+
+      - name: gofmt の差分が無いことを確認する
+        shell: bash
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt が必要なファイル:" >&2
+            echo "$out" >&2
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      # 静的検査（設計書 12 編 §12.7）と単体テストは go test に含まれる
+      - name: go test
+        run: go test -short ./...
+
+      # レース検出（設計書 12 編 §12.1）。並行処理を持たない
+      # internal/testrom は対象から外す
+      - name: go test -race
+        shell: bash
+        run: go test -race -short $(go list ./... | grep -v internal/testrom)
+
+  build:
+    name: ビルド (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe がタグを見つけられるように履歴を取得する
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          # go.sum は依存モジュールを追加するまで存在しない。
+          # 両方を挙げることで、片方だけでもキャッシュキーを作れる。
+          cache-dependency-path: |
+            go.mod
+            go.sum
+
+      - name: Linux の依存パッケージを導入する
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxxf86vm-dev xorg-dev
+
+      - name: ビルド
+        shell: bash
+        run: tools/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shogun-${{ runner.os }}
+          path: dist/
+          if-no-files-found: error

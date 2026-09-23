@@ -1,0 +1,15 @@
+{
+  "240pee/240pee.nes": "6eb1b35306c7f88ef2968995f6463b258053fd0134012e3ffc266eb6dada03a2",
+  "MMC1_A12/mmc1_a12.nes": "ac4cda5bf4154b38135c36a2cbddb663b94d87182e27094bdd83a7c700c98cad",
+  "allpads/allpads.nes#low-level-probing": "5fcbc613ad8562ae8a6a6630a3d9574211f8e5c905b659a19034b4430f5015ff",
+  "blargg_ppu_tests_2005.09.15b/palette_ram.nes": "9351a03f1ebb9a8cc6d93c023878b01b79d6beb0a93e92886d301b4aa70720cd",
+  "blargg_ppu_tests_2005.09.15b/vram_access.nes": "9351a03f1ebb9a8cc6d93c023878b01b79d6beb0a93e92886d301b4aa70720cd",
+  "branch_timing_tests/1.Branch_Basics.nes": "c5fc0ee34c88a7af0a3564edfa742633c5e9ccf2e78d489a4bf499c7eca36c25",
+  "dpcmletterbox/dpcmletterbox.nes": "67ef2808191a282724af256014f412a639a8c1aa24fc992f62f33997cf43db8e",
+  "full_palette/full_palette.nes": "85dff75301f8e924f849402ab8fe75ff323a66e12fc53dc36da1171d1c897283",
+  "other/nestest.nes": "7ec33df3f7ab4bd0ad88bf4d809d2c9a4ad88993b294a12d55b8e569d4f8610e",
+  "scanline/scanline.nes": "84f25b78f9d920bfb594f495cba09e436a64aa99990e83f8b3e04cf2687ca042",
+  "sprite_hit_tests_2005.10.05/04.flip.nes": "0bd85a77a7c2f305e7ae1901d88acc177339dd68c8555b7073d45c06edbb07cb",
+  "sprite_hit_tests_2005.10.05/08.double_height.nes": "1bb727a21bc1d1f36e3fb84af3abdd84a2b00ed27c98f6045f3b7a5a86be9d93",
+  "sprite_overflow_tests/1.Basics.nes": "f3f16ce05bf4f3ffe395847f34e0b8ab7651e49e637522f7ab8c9d54e615a8be"
+}

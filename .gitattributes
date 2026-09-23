@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.nes binary
+*.pal binary
+*.icns binary
+*.ico binary
+*.png binary
+*.state binary
+*.movie binary
+*.sav binary
+
+nestest.log text eol=lf

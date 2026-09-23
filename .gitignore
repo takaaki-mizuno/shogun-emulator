@@ -1,0 +1,16 @@
+# テスト ROM は取得スクリプトで配置する。リポジトリには含めない
+/testdata/roms/
+
+# ビルド成果物
+/shogun
+/shogun.exe
+/dist/
+*.syso
+
+# 生成物
+*.pdf
+/node_modules/
+
+# エディタと OS
+.DS_Store
+*.swp

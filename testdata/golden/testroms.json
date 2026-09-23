@@ -1,0 +1,394 @@
+{
+  "apu_mixer/dmc.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "apu_mixer/noise.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "apu_mixer/square.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "apu_mixer/triangle.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "apu_reset/4015_cleared.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_reset/4017_timing.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_reset/4017_written.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_reset/irq_flag_cleared.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_reset/len_ctrs_enabled.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_reset/works_immediately.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/apu_test.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "apu_test/rom_singles/1-len_ctr.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/2-len_table.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/3-irq_flag.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/4-jitter.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/5-len_timing.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/6-irq_flag_timing.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/7-dmc_basics.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "apu_test/rom_singles/8-dmc_rates.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "blargg_ppu_tests_2005.09.15b/palette_ram.nes": {
+    "expect": 1,
+    "timeout": 1800
+  },
+  "blargg_ppu_tests_2005.09.15b/power_up_palette.nes": {
+    "expect": 1,
+    "timeout": 1800
+  },
+  "blargg_ppu_tests_2005.09.15b/sprite_ram.nes": {
+    "expect": 1,
+    "timeout": 1800
+  },
+  "blargg_ppu_tests_2005.09.15b/vbl_clear_time.nes": {
+    "expect": 1,
+    "timeout": 1800
+  },
+  "blargg_ppu_tests_2005.09.15b/vram_access.nes": {
+    "expect": 1,
+    "timeout": 1800
+  },
+  "cpu_dummy_reads/cpu_dummy_reads.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "cpu_dummy_writes/cpu_dummy_writes_oam.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_dummy_writes/cpu_dummy_writes_ppumem.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_exec_space/test_cpu_exec_space_apu.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "cpu_exec_space/test_cpu_exec_space_ppuio.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "cpu_interrupts_v2/cpu_interrupts.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_interrupts_v2/rom_singles/1-cli_latency.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "cpu_reset/ram_after_reset.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "cpu_reset/registers.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "dmc_dma_during_read4/dma_2007_read.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "dmc_dma_during_read4/dma_2007_write.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "dmc_dma_during_read4/dma_4016_read.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "dmc_dma_during_read4/double_2007_read.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "dmc_dma_during_read4/read_write_2007.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "instr_misc/instr_misc.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_misc/rom_singles/01-abs_x_wrap.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_misc/rom_singles/02-branch_wrap.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_misc/rom_singles/03-dummy_reads.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_misc/rom_singles/04-dummy_reads_apu.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/all_instrs.nes": {
+    "expect": 0,
+    "timeout": 10800
+  },
+  "instr_test-v5/official_only.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/01-basics.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/02-implied.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/03-immediate.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/04-zero_page.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/05-zp_xy.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/06-absolute.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/07-abs_xy.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/08-ind_x.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/09-ind_y.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/10-branches.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/11-stack.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/12-jmp_jsr.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/13-rts.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/14-rti.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/15-brk.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_test-v5/rom_singles/16-special.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_timing/instr_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_timing/rom_singles/1-instr_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "instr_timing/rom_singles/2-branch_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "mmc3_test_2/rom_singles/1-clocking.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "mmc3_test_2/rom_singles/2-details.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "mmc3_test_2/rom_singles/3-A12_clocking.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "mmc3_test_2/rom_singles/4-scanline_timing.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "mmc3_test_2/rom_singles/5-MMC3.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "mmc3_test_2/rom_singles/6-MMC3_alt.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "oam_read/oam_read.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "oam_stress/oam_stress.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_open_bus/ppu_open_bus.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "ppu_read_buffer/test_ppu_read_buffer.nes": {
+    "expect": 0,
+    "timeout": 7200
+  },
+  "ppu_vbl_nmi/ppu_vbl_nmi.nes": {
+    "expect": 0,
+    "timeout": 7200
+  },
+  "ppu_vbl_nmi/rom_singles/01-vbl_basics.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/04-nmi_control.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/05-nmi_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/06-suppression.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "read_joy3/count_errors.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "read_joy3/count_errors_fast.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "read_joy3/test_buttons.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "read_joy3/thorough_test.nes": {
+    "expect": 0,
+    "timeout": 3600
+  },
+  "sprite_overflow_tests/1.Basics.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "sprite_overflow_tests/2.Details.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "sprite_overflow_tests/3.Timing.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "sprite_overflow_tests/4.Obscure.nes": {
+    "expect": 0,
+    "timeout": 1800
+  },
+  "sprite_overflow_tests/5.Emulator.nes": {
+    "expect": 0,
+    "timeout": 1800
+  }
+}
