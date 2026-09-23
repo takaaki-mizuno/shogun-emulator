@@ -45,17 +45,20 @@ type screen struct {
 	height   int
 	scale    int
 	aspect   bool
+	// integer は拡大を整数倍に限ることを表す。
+	integer bool
 }
 
 // newScreen は画面を作る。
 func newScreen(frames *emu.FrameBuffer, pal *video.Palette, cfg config.VideoConfig) *screen {
 	s := &screen{
-		frame:  video.NewFrame(),
-		pal:    pal,
-		frames: frames,
-		height: video.Height,
-		scale:  clampScale(cfg.Scale),
-		aspect: cfg.AspectRatioCorrection,
+		frame:   video.NewFrame(),
+		pal:     pal,
+		frames:  frames,
+		height:  video.Height,
+		scale:   clampScale(cfg.Scale),
+		aspect:  cfg.AspectRatioCorrection,
+		integer: cfg.IntegerScale,
 		overscan: video.Overscan{
 			Top:    clampOverscan(cfg.OverscanTop),
 			Bottom: clampOverscan(cfg.OverscanBottom),
@@ -71,13 +74,67 @@ func newScreen(frames *emu.FrameBuffer, pal *video.Palette, cfg config.VideoConf
 	s.pal.ApplyRect(s.frame, s.src, s.rgba)
 
 	s.img = canvas.NewImageFromImage(s.rgba)
-	// 拡大したときにドットがぼけないようにする。
-	s.img.ScaleMode = canvas.ImageScalePixels
-	s.img.FillMode = canvas.ImageFillContain
-	s.img.SetMinSize(s.minSize())
+	// 縦横比と大きさは screenLayout が決め、画像はその枠いっぱいに描く。
+	// canvas.Image の FillContain は画像の画素の縦横比を保つため、
+	// アスペクト比補正（横 8/7 倍）を表せない。
+	s.img.FillMode = canvas.ImageFillStretch
+	s.setFilter(cfg.Filter)
 	s.overlay = newSpriteOverlay(s.img)
-	s.content = container.NewStack(s.img, s.overlay)
+	s.content = container.New(&screenLayout{s: s}, s.img, s.overlay)
 	return s
+}
+
+// setFilter は拡大の補間を決める。nearest はドットをぼかさない。
+func (s *screen) setFilter(filter string) {
+	if filter == config.FilterLinear {
+		s.img.ScaleMode = canvas.ImageScaleSmooth
+	} else {
+		s.img.ScaleMode = canvas.ImageScalePixels
+	}
+}
+
+// applyVideo は映像の設定を反映する（設計書 11 編 §11.3.2 の即時の項目）。
+func (s *screen) applyVideo(cfg config.VideoConfig) {
+	s.scale = clampScale(cfg.Scale)
+	s.aspect = cfg.AspectRatioCorrection
+	s.integer = cfg.IntegerScale
+	s.overscan = video.Overscan{
+		Top:    clampOverscan(cfg.OverscanTop),
+		Bottom: clampOverscan(cfg.OverscanBottom),
+		Left:   clampOverscan(cfg.OverscanLeft),
+		Right:  clampOverscan(cfg.OverscanRight),
+	}
+	s.setFilter(cfg.Filter)
+	s.resize()
+}
+
+// screenLayout は画面の画像を置く位置と大きさを決める。
+//
+// 表示の縦横比（アスペクト比補正を含む）を保ったまま、与えられた大きさに
+// 収まる最大の大きさにする。整数倍のときは、表示の基準の大きさの整数倍の
+// うち収まる最大のものにする。
+type screenLayout struct{ s *screen }
+
+// MinSize は拡大率から決まる大きさ。
+func (l *screenLayout) MinSize([]fyne.CanvasObject) fyne.Size { return l.s.minSize() }
+
+// Layout は画像と重ねる層を同じ矩形に置く。
+func (l *screenLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	bw, bh := l.s.baseSize()
+	w, h := size.Width, size.Height
+	if l.s.integer {
+		n := max(1, min(int(w/bw), int(h/bh)))
+		w, h = bw*float32(n), bh*float32(n)
+	} else if w/h > bw/bh {
+		w = h * bw / bh
+	} else {
+		h = w * bh / bw
+	}
+	pos := fyne.NewPos((size.Width-w)/2, (size.Height-h)/2)
+	for _, o := range objects {
+		o.Move(pos)
+		o.Resize(fyne.NewSize(w, h))
+	}
 }
 
 // clampScale は拡大率を設定できる範囲に収める。
@@ -111,6 +168,15 @@ func (s *screen) setSpriteBoxes(boxes []image.Rectangle) {
 	s.overlay.setBoxes(s.src, boxes)
 }
 
+// baseSize は等倍のときの表示の大きさ（アスペクト比補正を含む）を返す。
+func (s *screen) baseSize() (float32, float32) {
+	w := float32(s.src.Dx())
+	if s.aspect {
+		w = w * aspectNumerator / aspectDenominator
+	}
+	return w, float32(s.src.Dy())
+}
+
 // minSize は拡大率とオーバースキャンから決まる最小の大きさを返す。
 func (s *screen) minSize() fyne.Size {
 	w, h := s.PixelSize()
@@ -130,8 +196,7 @@ func (s *screen) PixelSize() (int, int) {
 // SetScale は拡大率を変える。
 func (s *screen) SetScale(scale int) {
 	s.scale = clampScale(scale)
-	s.img.SetMinSize(s.minSize())
-	s.img.Refresh()
+	s.content.Refresh()
 }
 
 // Scale は現在の拡大率を返す。
@@ -154,8 +219,8 @@ func (s *screen) resize() {
 	s.rgba = image.NewRGBA(image.Rect(0, 0, s.src.Dx(), s.src.Dy()))
 	s.pal.ApplyRect(s.frame, s.src, s.rgba)
 	s.img.Image = s.rgba
-	s.img.SetMinSize(s.minSize())
 	s.img.Refresh()
+	s.content.Refresh()
 }
 
 // refresh は完成したフレームがあれば表示を更新する。

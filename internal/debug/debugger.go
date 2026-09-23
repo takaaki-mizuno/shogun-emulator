@@ -129,6 +129,7 @@ func (d *Debugger) Attach(n *nes.NES, symbols *Symbols) {
 	d.disasm = NewDisassembler(prgSize, symbols)
 	d.calls.Reset()
 	d.changes.Reset()
+	d.log.ResetRepeats()
 	d.tracer.Clear()
 	d.ramWritten = [2048]bool{}
 	d.hit = nil

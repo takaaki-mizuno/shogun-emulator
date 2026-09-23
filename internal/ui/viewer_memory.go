@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image/color"
 	"strconv"
 	"strings"
@@ -59,7 +61,7 @@ func (u *UI) newMemoryViewer() *memoryViewer {
 	return &memoryViewer{u: u, id: u.memoryCount, space: debug.SpaceCPU, perRow: 16, cursor: -1}
 }
 
-func (v *memoryViewer) Title() string { return fmt.Sprintf("メモリ %d", v.id) }
+func (v *memoryViewer) Title() string { return i18n.T(i18n.MemTitle, v.id) }
 
 func (v *memoryViewer) Content() fyne.CanvasObject {
 	if !v.open {
@@ -109,32 +111,32 @@ func (v *memoryViewer) Content() fyne.CanvasObject {
 	width.SetSelected(strconv.Itoa(v.perRow))
 
 	v.gotoE = widget.NewEntry()
-	v.gotoE.SetPlaceHolder("アドレス")
+	v.gotoE.SetPlaceHolder(i18n.T(i18n.MemAddress))
 	v.gotoE.OnSubmitted = v.gotoAddr
 	v.searchE = widget.NewEntry()
-	v.searchE.SetPlaceHolder("検索（A9 00 または文字列）")
+	v.searchE.SetPlaceHolder(i18n.T(i18n.MemSearchPlaceholder))
 	v.searchE.OnSubmitted = func(string) { v.search() }
-	v.textMode = widget.NewCheck("文字列", nil)
+	v.textMode = widget.NewCheck(i18n.T(i18n.MemTextMode), nil)
 	v.labelE = widget.NewEntry()
-	v.labelE.SetPlaceHolder("カーソル位置の名前")
+	v.labelE.SetPlaceHolder(i18n.T(i18n.MemLabelPlaceholder))
 	v.labelE.OnSubmitted = v.setLabel
 	v.info = widget.NewLabel("")
 	v.watchG = widget.NewTextGrid()
 
 	toolbar := container.NewVBox(
-		container.NewHBox(v.spaceSel, widget.NewLabel("1 行"), width,
-			widget.NewLabel("移動"), container.NewGridWrap(fyne.NewSize(120, 36), v.gotoE)),
+		container.NewHBox(v.spaceSel, widget.NewLabel(i18n.T(i18n.MemRowWidth)), width,
+			widget.NewLabel(i18n.T(i18n.MemGoto)), container.NewGridWrap(fyne.NewSize(120, 36), v.gotoE)),
 		container.NewBorder(nil, nil, nil,
-			container.NewHBox(v.textMode, widget.NewButton("次を検索", v.search)), v.searchE),
+			container.NewHBox(v.textMode, widget.NewButton(i18n.T(i18n.MemFindNext), v.search)), v.searchE),
 	)
 	watchBox := container.NewVBox(
-		widget.NewLabelWithStyle("ウォッチ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.MemWatch), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewHBox(
-			widget.NewButton("カーソルを追加", v.addWatch),
-			widget.NewButton("カーソルを削除", v.removeWatch),
+			widget.NewButton(i18n.T(i18n.MemWatchAdd), v.addWatch),
+			widget.NewButton(i18n.T(i18n.MemWatchRemove), v.removeWatch),
 		),
 		v.watchG,
-		widget.NewLabelWithStyle("名前", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.MemLabel), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		v.labelE,
 	)
 	bottom := container.NewVBox(v.info)
@@ -311,7 +313,7 @@ func (v *memoryViewer) drawWatch(list []watchValue) {
 		fmt.Fprintf(&b, "$%04X %-12s %02X (%d)\n", w.addr, w.name, w.value, w.value)
 	}
 	if len(list) == 0 {
-		b.WriteString("（なし）")
+		b.WriteString(i18n.T(i18n.CommonNone))
 	}
 	v.watchG.SetText(strings.TrimRight(b.String(), "\n"))
 }
@@ -319,16 +321,16 @@ func (v *memoryViewer) drawWatch(list []watchValue) {
 // drawInfo はカーソル位置と編集の方法を表示する。
 func (v *memoryViewer) drawInfo(snap memorySnapshot) {
 	if v.cursor < 0 {
-		v.info.SetText("バイトを選んで 16 進の桁をタイプすると書き換える")
+		v.info.SetText(i18n.T(i18n.MemHint))
 		return
 	}
-	mode := "副作用なし"
+	mode := i18n.T(i18n.MemNoSideEffect)
 	if v.u.cfg.Debug.MemoryEditWrite {
-		mode = "Bus.Write（副作用あり）"
+		mode = i18n.T(i18n.MemBusWrite)
 	}
-	text := fmt.Sprintf("カーソル $%0*X（%s）", v.layout.digits, v.space.Base()+v.cursor, mode)
+	text := i18n.T(i18n.MemCursor, v.layout.digits, v.space.Base()+v.cursor, mode)
 	if snap.label != "" {
-		text += "  名前: " + snap.label
+		text += i18n.T(i18n.MemCursorLabel) + snap.label
 	}
 	v.info.SetText(text)
 	if c := fyne.CurrentApp().Driver().CanvasForObject(v.labelE); c == nil || c.Focused() != v.labelE {
@@ -435,12 +437,12 @@ func (v *memoryViewer) typeRune(r rune) {
 func (v *memoryViewer) gotoAddr(s string) {
 	a, err := strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(s), "$"), 16, 32)
 	if err != nil {
-		v.u.showError(fmt.Errorf("16 進のアドレスとして読めない（%q）", s))
+		v.u.showError(errors.New(i18n.T(i18n.MemBadAddr, s)))
 		return
 	}
 	off := int(a) - v.space.Base()
 	if off < 0 || off >= v.size {
-		v.u.showError(fmt.Errorf("アドレス $%X はこの空間の範囲外である", a))
+		v.u.showError(errors.New(i18n.T(i18n.MemOutOfRange, a)))
 		return
 	}
 	v.cursor, v.lowNibble = off, false
@@ -464,7 +466,7 @@ func (v *memoryViewer) search() {
 	})
 	at := searchFrom(data, pat, v.cursor+1)
 	if at < 0 {
-		v.info.SetText("見つからない")
+		v.info.SetText(i18n.T(i18n.MemNotFound))
 		return
 	}
 	v.cursor, v.lowNibble = at, false
@@ -501,7 +503,7 @@ func (v *memoryViewer) removeWatch() {
 func (v *memoryViewer) setLabel(name string) {
 	a, ok := v.cpuAddr(v.cursor)
 	if !ok {
-		v.u.showError(fmt.Errorf("名前は CPU アドレス空間・内蔵 RAM・PRG-RAM のアドレスに付ける"))
+		v.u.showError(errors.New(i18n.T(i18n.MemLabelSpaces)))
 		return
 	}
 	v.withSymbols(func(s *debug.Symbols) { s.SetLabel(a, name) })

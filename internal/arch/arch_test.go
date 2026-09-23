@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode"
 )
 
 // pkg は go list から得たパッケージ 1 つ分の情報。
@@ -627,5 +628,40 @@ func TestDependencyDirection(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestUITextLivesInCatalog は internal/ui のコードに日本語の文字列リテラルが
+// 無いことを検証する。文言は internal/ui/i18n に集める（設計書 10 編 §10.9）。
+// テストのファイルと internal/ui/i18n は対象にしない。
+func TestUITextLivesInCatalog(t *testing.T) {
+	files := goFilesOf(t, "internal/ui")
+	if len(files) == 0 {
+		t.Log("internal/ui がまだない")
+		return
+	}
+	isJapanese := func(r rune) bool {
+		return unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r)
+	}
+	fset := token.NewFileSet()
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Errorf("%s の解析に失敗した: %v", path, err)
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			if strings.ContainsFunc(lit.Value, isJapanese) {
+				t.Errorf("%s: 文言 %s を直接書いている（internal/ui/i18n の表へ移す）", fset.Position(lit.Pos()), lit.Value)
+			}
+			return true
+		})
 	}
 }

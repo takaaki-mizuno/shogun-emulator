@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image"
 	"image/color"
 
@@ -41,7 +42,7 @@ func (u *UI) nametables() *nametableViewer {
 	return u.nametableViewer
 }
 
-func (v *nametableViewer) Title() string { return "ネームテーブル" }
+func (v *nametableViewer) Title() string { return i18n.T(i18n.ViewerNametable) }
 
 func (v *nametableViewer) Content() fyne.CanvasObject {
 	v.src.acquire()
@@ -67,13 +68,13 @@ func (v *nametableViewer) Content() fyne.CanvasObject {
 	})
 	zoom.SetSelected("1")
 	bar := container.NewHBox(
-		check("スクロール枠", &v.showScroll),
-		check("属性グリッド", &v.showAttr),
-		check("タイルグリッド", &v.showTile),
-		widget.NewLabel("拡大"), zoom,
+		check(i18n.T(i18n.NTScrollFrame), &v.showScroll),
+		check(i18n.T(i18n.NTAttrGrid), &v.showAttr),
+		check(i18n.T(i18n.NTTileGrid), &v.showTile),
+		widget.NewLabel(i18n.T(i18n.CommonZoom)), zoom,
 		v.src.lineSelector(v.Refresh),
 	)
-	hint := widget.NewLabel("クリックでタイル番号、右クリックで属性（パレット番号）を変える")
+	hint := widget.NewLabel(i18n.T(i18n.NTHint))
 	v.Refresh()
 	return container.NewBorder(bar, container.NewVBox(v.info, hint), nil, nil,
 		container.NewScroll(container.NewCenter(v.view)))
@@ -182,7 +183,7 @@ func (v *nametableViewer) hover(x, y int, ok bool) {
 		return
 	}
 	c := cell(&v.src.snap, x/8, y/8)
-	v.info.SetText(fmt.Sprintf("$%04X  タイル $%02X  属性 $%04X = $%02X  パレット %d",
+	v.info.SetText(i18n.T(i18n.NTHover,
 		c.addr, c.tile, c.attrAddr, c.attr, c.palette))
 }
 
@@ -218,7 +219,7 @@ func (v *nametableViewer) editTile(x, y int) {
 		d.Hide()
 		v.poke(int(c.addr), tile)
 	}
-	d = dialog.NewCustom(fmt.Sprintf("$%04X のタイル（現在 $%02X）", c.addr, c.tile), "取り消し", picker, v.u.win)
+	d = dialog.NewCustom(i18n.T(i18n.NTTileDialog, c.addr, c.tile), i18n.T(i18n.CommonCancel), picker, v.u.win)
 	d.Show()
 }
 
@@ -231,8 +232,8 @@ func (v *nametableViewer) editAttribute(x, y int) {
 	sel := widget.NewRadioGroup([]string{"0", "1", "2", "3"}, nil)
 	sel.Horizontal = true
 	sel.SetSelected(fmt.Sprint(c.palette))
-	dialog.ShowForm(fmt.Sprintf("属性 $%04X のパレット番号", c.attrAddr), "設定", "取り消し",
-		[]*widget.FormItem{widget.NewFormItem("パレット", sel)},
+	dialog.ShowForm(i18n.T(i18n.NTAttrDialog, c.attrAddr), i18n.T(i18n.MenuSettings), i18n.T(i18n.CommonCancel),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T(i18n.ViewerPalette), sel)},
 		func(ok bool) {
 			if !ok || sel.Selected == "" {
 				return

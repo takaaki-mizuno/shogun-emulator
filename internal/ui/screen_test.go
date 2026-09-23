@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"image/color"
 	"testing"
 
@@ -48,8 +50,8 @@ func TestScreenScalesAtEveryStep(t *testing.T) {
 		if w != video.Width*scale || h != video.Height*scale {
 			t.Errorf("%d 倍: 大きさ = %dx%d", scale, w, h)
 		}
-		if s.img.MinSize().Width != float32(w) {
-			t.Errorf("%d 倍: 最小の幅が %v である", scale, s.img.MinSize().Width)
+		if got := s.CanvasObject().MinSize().Width; got != float32(w) {
+			t.Errorf("%d 倍: 最小の幅が %v である", scale, got)
 		}
 	}
 }
@@ -135,5 +137,35 @@ func TestScreenClearGoesBlack(t *testing.T) {
 	s.Clear()
 	if got := s.rgba.RGBAAt(0, 0); got != (color.RGBA{0x00, 0x00, 0x00, 0xFF}) {
 		t.Errorf("(0,0) = %+v, 期待 黒", got)
+	}
+}
+
+// TestScreenLayoutKeepsAspect は画面の置き方が縦横比を保ち、整数倍の設定で
+// 整数倍に収まることを確かめる。
+func TestScreenLayoutKeepsAspect(t *testing.T) {
+	_, s := newTestScreen(config.VideoConfig{Scale: 2, AspectRatioCorrection: true, OverscanTop: 8, OverscanBottom: 8})
+	l := &screenLayout{s: s}
+	objs := []fyne.CanvasObject{s.img, s.overlay}
+	l.Layout(objs, fyne.NewSize(1000, 1000))
+	got := s.img.Size()
+	bw, bh := s.baseSize()
+	if d := got.Width/got.Height - bw/bh; d > 0.01 || d < -0.01 {
+		t.Errorf("縦横比 = %v, 期待 %v", got.Width/got.Height, bw/bh)
+	}
+	if got.Width != 1000 {
+		t.Errorf("幅が枠いっぱいになっていない: %v", got)
+	}
+
+	s.applyVideo(config.VideoConfig{Scale: 2, IntegerScale: true})
+	l.Layout(objs, fyne.NewSize(1000, 1000))
+	if got := s.img.Size(); got.Width != 768 || got.Height != 720 {
+		t.Errorf("整数倍の大きさ = %v, 期待 768x720", got)
+	}
+	if pos := s.img.Position(); pos.X != 116 || pos.Y != 140 {
+		t.Errorf("中央に置かれていない: %v", pos)
+	}
+	s.applyVideo(config.VideoConfig{Scale: 1, Filter: config.FilterLinear})
+	if s.img.ScaleMode != canvas.ImageScaleSmooth {
+		t.Error("linear のフィルタが反映されていない")
 	}
 }

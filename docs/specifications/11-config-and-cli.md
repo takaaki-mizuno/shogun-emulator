@@ -14,7 +14,34 @@
 
 環境変数の接頭辞を `SHOGUN_` とする。`SHOGUN_LOG_DIR` のように設定項目のパスを大文字とアンダースコアで表す。
 
-コマンドライン引数による上書きは設定ファイルへ書き戻さない。一時的な上書きとして扱う。
+| 環境変数 | 設定項目 |
+|---|---|
+| `SHOGUN_CONFIG` | 設定ファイルのパス（`--config` と同じ） |
+| `SHOGUN_PORTABLE` | `1` でポータブルモード（`--portable` と同じ） |
+| `SHOGUN_REGION` | `emulation.region` |
+| `SHOGUN_RAM_INIT` | `emulation.ramInitPattern` |
+| `SHOGUN_SCALE` | `video.scale` |
+| `SHOGUN_AUDIO` | `audio.enabled`（`0` で無効） |
+| `SHOGUN_AUDIO_BUFFER` | `audio.bufferMilliseconds` |
+| `SHOGUN_ROM_DIR` | `paths.romDir` |
+| `SHOGUN_SAVE_DIR` | `paths.saveDir` |
+| `SHOGUN_STATE_DIR` | `paths.stateDir` |
+| `SHOGUN_SCREENSHOT_DIR` | `paths.screenshotDir` |
+| `SHOGUN_LOG_DIR` | `paths.logDir` |
+| `SHOGUN_MOVIE_DIR` | `paths.movieDir` |
+| `SHOGUN_LOG` | `debug.logOutput` |
+| `SHOGUN_LOG_CATEGORIES` | `debug.logCategories`（カンマ区切り） |
+
+値を解釈できない環境変数は無視し、警告を出す。
+
+環境変数とコマンドライン引数による上書きは設定ファイルへ書き戻さない。一時的な上書きとして扱う。そのため設定を 2 つ持つ。
+
+| 設定 | 内容 |
+|---|---|
+| 保存する設定 | 設定ファイルの内容。設定画面・メニューの操作・ウィンドウ状態・最近使った ROM の変更はここへ入れ、ファイルへ保存する |
+| 使う設定 | 保存する設定に環境変数と引数の上書きを重ねたもの。エミュレータと GUI はこれを使う |
+
+保存する設定を変えたときは、使う設定を上書きし直して作る。
 
 ## 11.2 ディレクトリとファイル
 
@@ -31,8 +58,15 @@ type Paths struct {
     Screenshots string
 }
 
+// Overrides は環境変数と引数で指定された保存先。空の項目は既定の場所を使う。
+type Overrides struct {
+    Config, Data, Logs, Screenshots string
+}
+
 func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 ```
+
+各パッケージは `os.UserConfigDir` などを直接呼ばず、`ResolvePaths` の結果を受け取る。保存先の決め方をポータブルモードと上書きを含めて 1 か所に集めるためである。
 
 | 用途 | macOS | Windows | Linux |
 |---|---|---|---|
@@ -42,7 +76,7 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 | ログ | `~/Library/Logs/ShogunEmulator/` | `%LocalAppData%\ShogunEmulator\logs\` | `~/.local/state/shogun-emulator/logs/` |
 | スクリーンショット | `~/Pictures/ShogunEmulator/` | `%UserProfile%\Pictures\ShogunEmulator\` | `~/Pictures/ShogunEmulator/` |
 
-設定とキャッシュは `os.UserConfigDir` と `os.UserCacheDir` から求める。Linux のデータディレクトリは `$XDG_DATA_HOME`、未設定なら `$HOME/.local/share` とする。Go の標準ライブラリに対応する関数がないため自身で実装する。Linux のログディレクトリは `$XDG_STATE_HOME`、未設定なら `$HOME/.local/state` とする。
+設定とキャッシュは `os.UserConfigDir` と `os.UserCacheDir` から求める。これらがエラーを返したときは、ホームディレクトリ直下の `.shogun-emulator` を代わりに使う。ホームディレクトリも求められないときはエラーを返す。Linux のデータディレクトリは `$XDG_DATA_HOME`、未設定なら `$HOME/.local/share` とする。Go の標準ライブラリに対応する関数がないため自身で実装する。Linux のログディレクトリは `$XDG_STATE_HOME`、未設定なら `$HOME/.local/state` とする。
 
 データディレクトリ以下のファイル構成を次に示す。
 
@@ -59,9 +93,20 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 
 `<rom-hash>` はヘッダを除いた PRG-ROM と CHR-ROM の SHA-1 の先頭 16 桁を 16 進で表した文字列とする。ヘッダを含めないのは、同じゲームのダンプでヘッダの内容が異なる場合があり、含めると別のゲームとして扱われるためである。
 
+`ResolvePaths` は求めたディレクトリのうち、設定・データ・ログを作る。スクリーンショットとキャッシュのディレクトリは使うときに作る。
+
 ### 11.2.1 ポータブルモード
 
-実行ファイルと同じディレクトリに `portable.txt` が存在するとき、そのディレクトリを設定・データ・ログ・スクリーンショットの保存先とする。`--portable` を指定したときも同じ動作とする。
+実行ファイルと同じディレクトリに `portable.txt` が存在するとき、そのディレクトリを保存先とする。`--portable` と `SHOGUN_PORTABLE=1` を指定したときも同じ動作とする。
+
+| 用途 | ポータブルモードの場所 |
+|---|---|
+| 設定・データ | 実行ファイルのディレクトリ |
+| キャッシュ | 同 `cache/` |
+| ログ | 同 `logs/` |
+| スクリーンショット | 同 `screenshots/` |
+
+上書き（`Overrides`）はポータブルモードより優先する。
 
 ## 11.3 設定ファイル
 
@@ -84,9 +129,29 @@ type Config struct {
 
 すべてのフィールドに `omitempty` を付けない。設定ファイルを開いた利用者が設定可能な項目を一覧できる。
 
-未知のフィールドは無視し、`warn.compat` ではなく `error` ではない通常のログに記録する。`version` が現在の値より大きいとき、読み込みを中止して既定値で起動する。
+```go
+// Load は設定ファイルを読む。warnings は利用者へ知らせる注意。
+func Load(path string) (cfg *Config, warnings []string, err error)
 
-保存は一時ファイルへ書いて `rename` する。書き込み中の異常終了で設定を失わない。
+// Save は一時ファイルへ書いてから rename する。
+func (c *Config) Save(path string) error
+```
+
+読み込みの扱いを次に示す。
+
+| 状況 | 扱い |
+|---|---|
+| ファイルが無い | 既定値を返す |
+| JSON として読めない | 既定値を返し、元のファイルを `config.json.broken` へ名前を変えて残す。警告を出す |
+| 未知のフィールド | 無視し、フィールドのパスを警告に含める |
+| `version` が現在より大きい | 既定値を返し、警告を出す。ファイルは書き換えない |
+| `version` が現在より小さい | 移行する（§11.8） |
+| 値が範囲外 | その項目を既定値に戻し、警告を出す |
+| ファイルに無い項目 | 既定値のまま |
+
+`version` が新しいファイルを書き換えないのは、新しいバージョンに戻したときに設定を失わないためである。このとき保存する設定は既定値となり、終了時にも保存しない。
+
+保存は一時ファイルへ書いて `rename` する。書き込み中の異常終了で設定を失わない。保存の契機は、設定画面での保存、メニューの操作で保存する設定を変えたとき、アプリケーションの終了時である。
 
 ### 11.3.1 各セクション
 
@@ -147,10 +212,13 @@ type PathsConfig struct {
 
 type DebugConfig struct {
     LogCategories     []string `json:"logCategories"`
-    LogToFile         bool     `json:"logToFile"`
+    LogOutput         string   `json:"logOutput"`         // none, stderr, stdout, file
+    LogMaxBytes       int64    `json:"logMaxBytes"`       // ファイル出力のローテーションの大きさ
+    LogGenerations    int      `json:"logGenerations"`    // 残す世代数
     TraceRingSize     int      `json:"traceRingSize"`
     ChangeDecayFrames int      `json:"changeDecayFrames"` // 変更追跡の色が消えるまでのフレーム数
     MemoryEditWrite   bool     `json:"memoryEditWrite"`   // メモリビューアの編集に Bus.Write を使う
+    BreakOnUninitializedRAMRead bool `json:"breakOnUninitializedRamRead"` // ROM を読み込むたびにイベントブレークポイントを置く
 }
 
 type StateConfig struct {
@@ -168,9 +236,16 @@ type MovieConfig struct {
 }
 
 type UIConfig struct {
-    ViewerLayout string `json:"viewerLayout"`   // windows, docked
-    Language     string `json:"language"`
-    Theme        string `json:"theme"`          // auto, light, dark
+    ViewerLayout string                 `json:"viewerLayout"`   // windows, docked
+    Language     string                 `json:"language"`       // ja
+    Theme        string                 `json:"theme"`          // auto, light, dark
+    Windows      map[string]WindowState `json:"windows"`        // 「10 GUI 設計」§10.7
+    RecentROMs   []RecentROM            `json:"recentRoms"`     // 新しい順、最大 10 件
+}
+
+type RecentROM struct {
+    Path string `json:"path"`
+    Name string `json:"name"`
 }
 ```
 
@@ -207,14 +282,70 @@ type UIConfig struct {
 | `debug.logCategories` | `["warn.compat", "error"]` | まれにしか出ないカテゴリだけを記録し、通常のプレイを遅くしない |
 | `debug.changeDecayFrames` | 30 | 約 0.5 秒で色が消える |
 | `debug.memoryEditWrite` | `false` | 表示の確認のための編集でレジスタの副作用を起こさない |
+| `debug.logOutput` | `stderr` | `warn.compat` と `error` だけが既定で有効であり、出力が少ない |
+| `debug.logMaxBytes` | 10485760 | 10 MiB |
+| `debug.logGenerations` | 3 | |
 
 `audio.ringHighWaterMultiplier` に 2 未満を指定したとき 2 に丸める。等倍では処理の遅れがそのまま音切れになる。
+
+`audio.sampleRate` は読み込んだ値によらず 48000 とする。`oto.NewContext` をプロセスで 1 回しか呼べず、レートを変えるには再起動が要るためである。レートを変えられる項目として見せず、バッファ長だけを設定できるようにする。
+
+範囲を検証する項目を次に示す。範囲外の値と、選択肢に無い文字列は既定値に戻す。
+
+| 項目 | 範囲 |
+|---|---|
+| `emulation.region` | `auto`・`ntsc`・`pal`・`dendy` |
+| `emulation.ramInitPattern` | `zero`・`ff`・`pattern`・`random` |
+| `emulation.cpuPpuAlignment` | 0–2 |
+| `emulation.dmaGetPutPhase` | 0–1 |
+| `emulation.mmc3IrqVariant` | `sharp`・`nec` |
+| `emulation.busConflicts` | `auto`・`always`・`never` |
+| `video.scale` | 1–8 |
+| `video.overscan*` | 0–16 |
+| `video.filter` | `nearest`・`linear` |
+| `audio.bufferMilliseconds` | 5–200 |
+| `audio.masterVolume`・`audio.channelVolumes` の各値 | 0.0–1.0 |
+| `audio.filterProfile` | `nes`・`famicom`・`none` |
+| `input.port1Device`・`port2Device` | `standard`・`none` |
+| `input.turboRateHz` | 1–30 |
+| `debug.logOutput` | `none`・`stderr`・`stdout`・`file` |
+| `debug.logCategories` | 「09 デバッガ設計」§9.8 のカテゴリ名。知らない名前を除く |
+| `debug.traceRingSize` | 1000–10000000 |
+| `state.slots` | 1–10 |
+| `state.rewindSeconds` | 1–600 |
+| `state.rewindIntervalFrames` | 1–60 |
+| `movie.checksumIntervalFrames` | 1–3600 |
+| `ui.viewerLayout` | `windows`・`docked` |
+| `ui.language` | `ja` |
+| `ui.theme` | `auto`・`light`・`dark` |
+| `ui.recentRoms` | 11 件目以降を捨てる |
+
+### 11.3.2 反映の時期
+
+設定画面で保存した変更は、項目ごとに次の時期に効く。設定画面は各タブにこの区別を表示する。
+
+| 時期 | 項目 |
+|---|---|
+| 即時 | `video` の全項目、`audio` のうちバッファ長・主音量・チャンネル別音量・早送り時のミュート・Triangle の超音波停止、キーバインドと連射、`debug.logCategories`・`debug.memoryEditWrite`・`debug.changeDecayFrames`、`ui.theme`・`ui.viewerLayout` |
+| ROM の再読み込み後 | `emulation` の全項目、`audio.filterProfile`、`input.port1Device`・`port2Device`、`paths` の全項目、`state` の全項目、`movie` の全項目、`debug.breakOnUninitializedRamRead` |
+| 再起動後 | `audio.enabled`、`debug.logOutput`・`debug.logMaxBytes`・`debug.logGenerations`・`debug.traceRingSize` |
+
+`emulation` を ROM の再読み込み後とするのは、電源投入時の状態とマッパーの挙動を途中から変えると、実機に無い状態が生じるためである。
 
 ## 11.4 キーバインドファイル
 
 構造は「07 入力設計」§7.4.3 に定める。ファイル名を `keybindings.json` とする。
 
 設定ファイルと分けるのは、既定値へ戻す操作を設定全体と独立に行えるようにするためである。
+
+```go
+// knownCode はキーの変換表（「10 GUI 設計」§10.6）にあるコードかを返す。
+// 変換表は GUI の側にあるため、呼び出し側が渡す。
+func LoadKeybindings(path string, knownCode func(code string) bool) (k *Keybindings, warnings []string, err error)
+func (k *Keybindings) Save(path string) error
+```
+
+ファイルが無いときは既定値（「07 入力設計」§7.4.4）を返す。JSON として読めないときは既定値を返し、元のファイルを `keybindings.json.broken` として残す。知らないアクション名と、キーの変換表（「10 GUI 設計」§10.6）に載っていないキーコードは無視し、警告に含める。保存は一時ファイルへ書いて `rename` する。
 
 ## 11.5 コマンドライン
 
@@ -239,7 +370,7 @@ ROM ファイルを引数に渡すと、それを開いて GUI を起動する�
 | `--fullscreen` | フルスクリーンで起動する |
 | `--no-audio` | 音声を出力しない |
 | `--audio-buffer MS` | オーディオバッファの長さを指定する |
-| `--sample-rate HZ` | サンプリングレートを指定する |
+| `--sample-rate HZ` | 48000 だけを受け付ける。他の値は警告して無視する（§11.3.1） |
 | `--speed FACTOR` | 実行速度の倍率を指定する |
 | `--save-dir PATH` | バッテリーバックアップの保存先を指定する |
 | `--state-dir PATH` | セーブステートの保存先を指定する |
@@ -251,15 +382,17 @@ ROM ファイルを引数に渡すと、それを開いて GUI を起動する�
 | `--ram-init {zero,ff,pattern,random}` | RAM の初期化パターンを指定する |
 | `--ram-seed N` | RAM 初期化の乱数シードを指定する |
 | `--deterministic` | 値が定まらない状態をすべて固定値にする |
-| `--debug` | デバッグモードを有効にする |
+| `--debug` | CPU デバッガを開き、一時停止した状態で起動する。headless では無視する |
 | `--log {stdout,stderr,file}` | ログの出力先を指定する |
 | `--log-dir PATH` | ログの保存先を指定する |
 | `--log-categories LIST` | ログカテゴリをカンマ区切りで指定する |
-| `--trace-log PATH` | CPU トレースをこのファイルへ出力する |
-| `--break-at ADDR` | 起動時にブレークポイントを設定する |
+| `--trace-log PATH` | CPU トレースをこのファイルへ常時出力する（「09 デバッガ設計」§9.7） |
+| `--break-at ADDR` | 起動時に実行ブレークポイントを設定する。16 進（`$C000` または `C000`）。headless では止まった時点で理由を表示して終了する |
 | `--headless` | GUI を起動せずに実行する |
 | `--frames N` | N フレーム実行して終了する |
-| `--screenshot PATH` | 終了時にスクリーンショットを保存する |
+| `--screenshot PATH` | 終了時にスクリーンショットを PNG で保存する |
+
+引数が不正なとき、および ROM を指定せずに `--headless` を指定したときは、理由を表示して終了コード 2 で終える。`--help` の出力はオプションを「表示と音声」「保存先」「ステートとムービー」「決定論」「デバッグ」「headless」に分けて並べる。
 
 ### 11.5.2 headless モード
 
@@ -275,7 +408,7 @@ func runHeadless(cfg *config.Config, opts headlessOptions) int
 | `--headless --trace-log PATH --frames N` | CPU トレースを取得する |
 | `--headless --movie PATH` | ムービーを再生して desync を検査する |
 
-headless モードではオーディオデバイスを開かない。進行の駆動をオーディオに依存させず、可能な速度で実行する。
+headless モードではオーディオデバイスを開かない。進行の駆動をオーディオに依存させず、可能な速度で実行する。 ROM は一時停止した状態で読み込み、`--frames` のフレーム数だけ進める。読み込んだ直後から進むと、`--frames` の数とトレースの先頭が実行ごとに変わるためである。設定ファイルへは書かない。
 
 終了コードを次のとおり定める。
 
@@ -298,13 +431,17 @@ Windows 向けのビルドに `-H windowsgui` を指定する。GUI 起動時に
 
 package main
 
+var procAttachConsole = windows.NewLazySystemDLL("kernel32.dll").NewProc("AttachConsole")
+
 func attachConsoleIfNeeded() {
     if len(os.Args) > 1 {
-        windows.AttachConsole(windows.ATTACH_PARENT_PROCESS)
-        // os.Stdout と os.Stderr を接続したコンソールへ差し替える
+        procAttachConsole.Call(attachParentProcess) // ATTACH_PARENT_PROCESS = 0xFFFFFFFF
+        // CONOUT$ を開き、os.Stdout と os.Stderr をそれに差し替える
     }
 }
 ```
+
+`golang.org/x/sys/windows` は `AttachConsole` の関数を持たないため、`kernel32.dll` から呼ぶ。親プロセスにコンソールが無い（エクスプローラから起動した）ときは接続に失敗し、何もしない。
 
 `--log=stdout` と `--headless` を指定した場合に出力が見えるようにするための処理である。
 
@@ -360,4 +497,8 @@ type migration struct {
 }
 ```
 
-移行後の設定を保存する。移行前の内容を `config.json.v<N>.bak` として残す。
+移行は JSON を `map[string]any` として読んだ段階で行い、その後で構造体へ読み込む。移行後の設定を保存する。移行前の内容を `config.json.v<N>.bak`（`<N>` は移行前の `version`）として残す。
+
+| 移行 | 内容 |
+|---|---|
+| 1 → 2 | `debug.logToFile` を `debug.logOutput` に置き換える。`true` は `file`、`false` は `stderr` とする |

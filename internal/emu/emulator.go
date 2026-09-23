@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,11 +51,19 @@ type Config struct {
 	Commit  string
 	// Debug はデバッガの設定。
 	Debug config.DebugConfig
-	// SymbolsDir と TraceDir は名前とトレースの保存先。空のとき既定の場所。
+	// Dirs は保存先のディレクトリ（設計書 11 編 §11.2）。Data が空のとき
+	// 既定の場所を使う。
+	Dirs config.Paths
+	// SymbolsDir と TraceDir は名前とトレースの保存先。空のとき Dirs から決める。
 	SymbolsDir string
 	TraceDir   string
-	// PatchesDir はオーバーレイの保存先。空のとき既定の場所。
+	// PatchesDir はオーバーレイの保存先。空のとき Dirs から決める。
 	PatchesDir string
+	// LogWriter はログの出力先。nil のときログビューア向けの保持だけを行う。
+	LogWriter io.Writer
+	// StartPaused は ROM を読み込んだときに一時停止した状態で始めることを
+	// 表す。headless 実行が、進めるフレーム数を正確に数えるために使う。
+	StartPaused bool
 	// OnBreak はブレークポイントで止まったときに呼ばれる。nil のとき
 	// 呼ばない。エミュレーションゴルーチンから呼ばれる。
 	OnBreak func(info debug.BreakInfo)
@@ -205,6 +214,10 @@ type Emulator struct {
 	traceFile *os.File
 	// apuMute は APU のミュートのビット。ROM を読み込み直しても保つ。
 	apuMute uint8
+	// turbo は連射の状態。
+	turbo turboState
+	// startupBreaks は ROM を読み込むたびに置く実行ブレークポイント。
+	startupBreaks []uint16
 	// lastFrame は直前に完成したフレーム。セーブステートに添える
 	// スクリーンショットを作るために保持する。
 	lastFrame *video.Frame
@@ -225,6 +238,13 @@ type Emulator struct {
 // 起動しない状態を作らない（設計書 01 編 §1.9）。失敗した理由は
 // AudioError で取り出せる。
 func New(cfg Config) *Emulator {
+	if cfg.Dirs.Data == "" {
+		// 保存先を与えられなかったときは既定の場所を使う。ここでは
+		// ディレクトリを作らず、書き込むときに作る。
+		if p, err := config.DefaultPaths(); err == nil {
+			cfg.Dirs = p
+		}
+	}
 	e := &Emulator{
 		cfg:       cfg,
 		Frames:    NewFrameBuffer(),
@@ -265,6 +285,9 @@ func (e *Emulator) defaultPacer(r *region.Region) Pacer {
 	}
 	return NewWallClockPacer(r)
 }
+
+// Dirs は保存先のディレクトリを返す。
+func (e *Emulator) Dirs() config.Paths { return e.cfg.Dirs }
 
 // SetOnBreak はブレークポイントで止まったときの知らせ先を差し替える。
 //
@@ -429,11 +452,7 @@ func (e *Emulator) buildMachine(data []uint8) (*nes.NES, *battery, error) {
 //
 // 持たない ROM では nil を返す。
 func (e *Emulator) openBattery(m *nes.NES) (*battery, error) {
-	dir, err := config.SaveDir(e.cfg.Paths.SaveDir)
-	if err != nil {
-		return nil, err
-	}
-	return newBattery(dir, m.ROM.Hash[:], m.Cart)
+	return newBattery(e.cfg.Dirs.SaveDir(e.cfg.Paths.SaveDir), m.ROM.Hash[:], m.Cart)
 }
 
 // resolveRegion は設定と ROM のヘッダからリージョンを決める。

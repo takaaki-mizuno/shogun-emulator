@@ -3,6 +3,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,9 +30,6 @@ const appID = "dev.takaakimizuno.shogun-emulator"
 // 値は表示に影響しない。終わらないアニメーションとして登録する。
 const refreshCycle = time.Second
 
-// maxRecentROMs は最近使った ROM を覚える数。
-const maxRecentROMs = 10
-
 // 早送りとスローの倍率。
 //
 // 早送りで待ちを行わない境界を選ぶ。これより下の倍率にすると、
@@ -50,8 +48,11 @@ type UI struct {
 	win fyne.Window
 
 	emu *emu.Emulator
-	cfg *config.Config
-	pal *video.Palette
+	// store は保存する設定と使う設定を持つ。cfg は store の使う設定を指す。
+	// テストでは store を持たず cfg だけを持つことがある。
+	store *config.Store
+	cfg   *config.Config
+	pal   *video.Palette
 
 	// bindings は物理キーからアクションへの表。
 	bindings map[string][]config.Action
@@ -75,8 +76,6 @@ type UI struct {
 	// muted は消音中かどうかの、UI 側が持つ見かけ。
 	muted bool
 
-	// recent は最近使った ROM のパス。新しいものを先頭に置く。
-	recent []string
 	// recentItem は最近使った ROM のメニュー項目。中身を作り直すために持つ。
 	recentItem *fyne.MenuItem
 
@@ -120,23 +119,31 @@ type UI struct {
 	breakPending atomic.Bool
 	// viewerTick はビューアの更新を間引くための数。
 	viewerTick int
+	// openDebugger は起動したときに CPU デバッガを開くことを表す。
+	openDebugger bool
+	// settingsWin は設定ウィンドウ。開いていないとき nil。
+	settingsWin fyne.Window
+	// keyCapture はキーバインドの取り込み中であることを表す。ホットキーを止める。
+	keyCapture bool
 }
 
 // New は画面を作る。
-func New(e *emu.Emulator, cfg *config.Config, keys *config.Keybindings, version string) *UI {
+func New(e *emu.Emulator, store *config.Store, version string) *UI {
 	a := app.NewWithID(appID)
+	cfg := store.Config()
 	pal := loadPalette(cfg.Video.PaletteFile)
 
 	u := &UI{
 		app:       a,
 		emu:       e,
+		store:     store,
 		cfg:       cfg,
 		pal:       pal,
-		bindings:  keys.Resolve(),
 		pressed:   map[string]bool{},
 		baseSpeed: 1.0,
 		version:   version,
 	}
+	u.applyKeys(store.Keys())
 	u.screen = newScreen(e.Frames, pal, cfg.Video)
 	u.status = newStatusBar(e.Frames)
 	// エミュレーションゴルーチンからの知らせを溜め、画面の更新で出す。
@@ -157,7 +164,7 @@ func loadPalette(path string) *video.Palette {
 	}
 	p, err := video.LoadPaletteFile(path)
 	if err != nil {
-		fyne.LogError("パレットファイルを読めないため組み込みのパレットを使う", err)
+		fyne.LogError(i18n.T(i18n.LogPaletteFallback), err)
 		return video.DefaultPalette()
 	}
 	return p
@@ -179,32 +186,100 @@ func (u *UI) Run() {
 	u.win.SetContent(u.buildContent())
 	u.win.SetMainMenu(u.buildMainMenu())
 	u.win.Resize(u.preferredSize())
+	if st, ok := u.cfg.UI.Windows[windowMain]; ok && st.Width > 0 && st.Height > 0 {
+		u.win.Resize(fyne.NewSize(float32(st.Width), float32(st.Height)))
+	}
 	u.win.SetFullScreen(u.cfg.Video.Fullscreen)
 	u.installKeyHandlers()
+	u.applyTheme()
 
 	u.win.SetOnClosed(func() {
 		u.stopRefreshing()
+		u.saveWindowStates()
 		u.emu.Stop()
 	})
 
 	u.emu.Start()
 	u.startRefreshing()
+	u.reopenViewers()
+	if u.openDebugger {
+		u.showViewer(u.cpuDebugger())
+		u.emu.Pause()
+	}
 	u.win.ShowAndRun()
 }
+
+// viewerClosed はビューアを閉じたときにサイズと表示状態を記録する。
+//
+// 配置を切り替えるときも一度閉じるため、表示状態は閉じたものになる。
+// 切り替えの後に開き直したビューアは、終了時に開いたものとして記録し直す。
+func (u *UI) viewerClosed(v Viewer, size fyne.Size) {
+	if nv, ok := v.(namedViewer); ok {
+		u.recordWindow(nv.WindowName(), size, false)
+	}
+}
+
+// update は保存する設定を fn で変えて保存する。使う設定も作り直す。
+//
+// store を持たないとき（テスト）は使う設定を直接変える。
+func (u *UI) update(fn func(c *config.Config)) {
+	if u.store == nil {
+		fn(u.cfg)
+		return
+	}
+	if err := u.store.Update(fn); err != nil {
+		u.showError(err)
+	}
+}
+
+// applyKeys はキーバインドを反映する。物理キーの表を作り直し、連射の
+// レートをエミュレータへ渡す。
+func (u *UI) applyKeys(k *config.Keybindings) {
+	u.bindings = k.Resolve()
+	for port := range 2 {
+		u.emu.SetTurbo(port, k.Player(port+1).Turbo)
+	}
+}
+
+// StartTraceLog はトレースを path へ常時出力し始める（引数 --trace-log）。
+func (u *UI) StartTraceLog(path string) error {
+	if err := u.emu.StartTraceLog(path); err != nil {
+		return err
+	}
+	u.debugUsers.tracing = true
+	u.applyDebugFeatures()
+	return nil
+}
+
+// OpenDebuggerOnStart は起動したときに CPU デバッガを開いて一時停止する
+// （引数 --debug）。Run の前に呼ぶ。
+func (u *UI) OpenDebuggerOnStart() { u.openDebugger = true }
 
 // buildContent はメインウィンドウの中身を組み立てる。
 //
 // ビューアをタブに置く配置のときだけタブを作る。ビューアが無いあいだも
 // タブを置くと、空のタブ列が画面を占める。
 func (u *UI) buildContent() fyne.CanvasObject {
-	center := container.NewCenter(u.screen.CanvasObject())
+	// 画面は screenLayout が縦横比を保って中央に置く。ウィンドウを広げた
+	// ときとフルスクリーンのときに大きく描くため、Center で包まない。
+	center := u.screen.CanvasObject()
 	if u.cfg.UI.ViewerLayout == config.LayoutDocked {
 		u.tabs = container.NewAppTabs()
-		u.host = newDockedHost(u.tabs)
+		dh := newDockedHost(u.tabs).(*dockedHost)
+		dh.onClosed = u.viewerClosed
+		u.host = dh
 		return container.NewBorder(nil, u.status.CanvasObject(), nil, nil,
 			container.NewHSplit(center, u.tabs))
 	}
-	u.host = newWindowHost(u.app)
+	wh := newWindowHost(u.app).(*windowHost)
+	wh.sizeOf = func(v Viewer) (fyne.Size, bool) {
+		if nv, ok := v.(namedViewer); ok {
+			return u.windowSize(nv.WindowName())
+		}
+		return fyne.Size{}, false
+	}
+	wh.onClosed = u.viewerClosed
+	u.host = wh
 	return container.NewBorder(nil, u.status.CanvasObject(), nil, nil, center)
 }
 
@@ -219,11 +294,16 @@ func (u *UI) SetViewerLayout(layout string) {
 	if layout == u.cfg.UI.ViewerLayout {
 		return
 	}
-	u.cfg.UI.ViewerLayout = layout
+	u.update(func(c *config.Config) { c.UI.ViewerLayout = layout })
+	u.switchLayout()
+}
+
+// switchLayout は設定 ui.viewerLayout に合わせてメインウィンドウの中身を
+// 作り直し、表示中のビューアを新しい置き場所へ移す。
+func (u *UI) switchLayout() {
 	if u.win == nil {
 		return
 	}
-
 	old := u.host
 	u.win.SetContent(u.buildContent())
 	if old != nil {
@@ -250,7 +330,7 @@ func (u *UI) windowTitle() string {
 }
 
 // appTitle はウィンドウタイトルに使うアプリケーション名。
-const appTitle = "将軍エミュレータ"
+var appTitle = i18n.T(i18n.AppTitle)
 
 // startRefreshing は画面の更新を Fyne のフレーム駆動に載せる。
 //
@@ -374,6 +454,11 @@ func (u *UI) installKeyHandlers() {
 // showError はエラーをダイアログで表示する。
 func (u *UI) showError(err error) {
 	if err == nil {
+		return
+	}
+	if u.win == nil {
+		// ウィンドウを開く前（テストと起動の途中）はダイアログを出せない。
+		fyne.LogError(i18n.T(i18n.LogError), err)
 		return
 	}
 	dialog.ShowError(err, u.win)

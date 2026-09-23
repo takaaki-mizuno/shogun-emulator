@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
+	"os"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
@@ -34,49 +36,50 @@ func (u *UI) buildMainMenu() *fyne.MainMenu {
 		u.movieMenu(),
 		u.viewMenu(),
 		u.debugMenu(),
+		u.settingsMenu(),
 		u.helpMenu(),
 	)
 }
 
 // fileMenu はファイルメニューを作る。
 func (u *UI) fileMenu() *fyne.Menu {
-	open := fyne.NewMenuItem("ROM を開く…", u.openROMDialog)
+	open := fyne.NewMenuItem(i18n.T(i18n.MenuOpenROM), u.openROMDialog)
 	// OS ごとの修飾キー（macOS は Command、他は Control）を使う。
 	open.Shortcut = &desktop.CustomShortcut{
 		KeyName:  fyne.KeyO,
 		Modifier: fyne.KeyModifierShortcutDefault,
 	}
 
-	u.recentItem = fyne.NewMenuItem("最近使った ROM", nil)
+	u.recentItem = fyne.NewMenuItem(i18n.T(i18n.MenuRecentROMs), nil)
 	u.updateRecentMenu()
 
-	closeROM := fyne.NewMenuItem("ROM を閉じる", func() {
+	closeROM := fyne.NewMenuItem(i18n.T(i18n.MenuCloseROM), func() {
 		u.showError(u.emu.Unload())
 		u.afterROMChange()
 	})
-	quit := fyne.NewMenuItem("終了", func() { u.win.Close() })
+	quit := fyne.NewMenuItem(i18n.T(i18n.MenuQuit), func() { u.win.Close() })
 	quit.IsQuit = true
 
-	return fyne.NewMenu("ファイル", open, u.recentItem, fyne.NewMenuItemSeparator(), closeROM, quit)
+	return fyne.NewMenu(i18n.T(i18n.MenuFile), open, u.recentItem, fyne.NewMenuItemSeparator(), closeROM, quit)
 }
 
 // runMenu は実行メニューを作る。
 func (u *UI) runMenu() *fyne.Menu {
-	pause := fyne.NewMenuItem("一時停止", u.togglePause)
-	step := fyne.NewMenuItem("コマ送り", u.frameAdvance)
-	reset := fyne.NewMenuItem("リセット", func() { u.showError(u.emu.Reset(false)) })
-	hardReset := fyne.NewMenuItem("ハードリセット", func() { u.showError(u.emu.Reset(true)) })
+	pause := fyne.NewMenuItem(i18n.T(i18n.MenuPause), u.togglePause)
+	step := fyne.NewMenuItem(i18n.T(i18n.MenuFrameAdvance), u.frameAdvance)
+	reset := fyne.NewMenuItem(i18n.T(i18n.MenuReset), func() { u.showError(u.emu.Reset(false)) })
+	hardReset := fyne.NewMenuItem(i18n.T(i18n.MenuHardReset), func() { u.showError(u.emu.Reset(true)) })
 
 	speeds := make([]*fyne.MenuItem, 0, len(speedChoices))
 	for _, f := range speedChoices {
 		speeds = append(speeds, fyne.NewMenuItem(speedText(f), func() { u.SetSpeed(f) }))
 	}
-	speed := fyne.NewMenuItem("速度", nil)
+	speed := fyne.NewMenuItem(i18n.T(i18n.MenuSpeed), nil)
 	speed.ChildMenu = fyne.NewMenu("", speeds...)
 
-	rewind := fyne.NewMenuItem("巻き戻し", func() { u.showError(u.emu.Rewind(rewindMenuFrames)) })
+	rewind := fyne.NewMenuItem(i18n.T(i18n.MenuRewind), func() { u.showError(u.emu.Rewind(rewindMenuFrames)) })
 
-	return fyne.NewMenu("実行", pause, step, fyne.NewMenuItemSeparator(), reset, hardReset,
+	return fyne.NewMenu(i18n.T(i18n.MenuRun), pause, step, fyne.NewMenuItemSeparator(), reset, hardReset,
 		fyne.NewMenuItemSeparator(), speed, rewind)
 }
 
@@ -84,62 +87,62 @@ func (u *UI) runMenu() *fyne.Menu {
 func (u *UI) viewMenu() *fyne.Menu {
 	scales := make([]*fyne.MenuItem, 0, config.MaxScale)
 	for s := config.MinScale; s <= config.MaxScale; s++ {
-		scales = append(scales, fyne.NewMenuItem(fmt.Sprintf("%d 倍", s), func() { u.setScale(s) }))
+		scales = append(scales, fyne.NewMenuItem(i18n.T(i18n.MenuScaleN, s), func() { u.setScale(s) }))
 	}
-	scale := fyne.NewMenuItem("拡大率", nil)
+	scale := fyne.NewMenuItem(i18n.T(i18n.MenuScale), nil)
 	scale.ChildMenu = fyne.NewMenu("", scales...)
 
-	full := fyne.NewMenuItem("フルスクリーン", u.toggleFullscreen)
+	full := fyne.NewMenuItem(i18n.T(i18n.MenuFullscreen), u.toggleFullscreen)
 
-	layout := fyne.NewMenuItem("ビューアの配置", nil)
+	layout := fyne.NewMenuItem(i18n.T(i18n.MenuViewerLayout), nil)
 	layout.ChildMenu = fyne.NewMenu("",
-		fyne.NewMenuItem("別ウィンドウ", func() { u.SetViewerLayout(config.LayoutWindows) }),
-		fyne.NewMenuItem("タブ", func() { u.SetViewerLayout(config.LayoutDocked) }),
+		fyne.NewMenuItem(i18n.T(i18n.MenuLayoutWindows), func() { u.SetViewerLayout(config.LayoutWindows) }),
+		fyne.NewMenuItem(i18n.T(i18n.MenuLayoutTabs), func() { u.SetViewerLayout(config.LayoutDocked) }),
 	)
 
-	pattern := fyne.NewMenuItem("パターンテーブル", func() { u.toggleViewer(u.patterns()) })
-	nametable := fyne.NewMenuItem("ネームテーブル", func() { u.toggleViewer(u.nametables()) })
-	sprite := fyne.NewMenuItem("スプライト", func() { u.toggleViewer(u.sprites()) })
-	palette := fyne.NewMenuItem("パレット", func() { u.toggleViewer(u.palettes()) })
+	pattern := fyne.NewMenuItem(i18n.T(i18n.ViewerPattern), func() { u.toggleViewer(u.patterns()) })
+	nametable := fyne.NewMenuItem(i18n.T(i18n.ViewerNametable), func() { u.toggleViewer(u.nametables()) })
+	sprite := fyne.NewMenuItem(i18n.T(i18n.ViewerSprite), func() { u.toggleViewer(u.sprites()) })
+	palette := fyne.NewMenuItem(i18n.T(i18n.ViewerPalette), func() { u.toggleViewer(u.palettes()) })
 	apuView := fyne.NewMenuItem("APU", func() { u.toggleViewer(u.apus()) })
-	cpuView := fyne.NewMenuItem("CPU デバッガ", func() { u.showViewer(u.cpuDebugger()) })
-	memory := fyne.NewMenuItem("メモリ（新しく開く）", func() { u.showViewer(u.newMemoryViewer()) })
-	logs := fyne.NewMenuItem("ログ", func() { u.showViewer(u.logs()) })
+	cpuView := fyne.NewMenuItem(i18n.T(i18n.ViewerCPU), func() { u.showViewer(u.cpuDebugger()) })
+	memory := fyne.NewMenuItem(i18n.T(i18n.MenuMemoryNew), func() { u.showViewer(u.newMemoryViewer()) })
+	logs := fyne.NewMenuItem(i18n.T(i18n.ViewerLog), func() { u.showViewer(u.logs()) })
 
-	return fyne.NewMenu("表示", scale, full, fyne.NewMenuItemSeparator(),
+	return fyne.NewMenu(i18n.T(i18n.MenuView), scale, full, fyne.NewMenuItemSeparator(),
 		pattern, nametable, sprite, palette, apuView, fyne.NewMenuItemSeparator(),
 		cpuView, memory, logs, fyne.NewMenuItemSeparator(), layout)
 }
 
 // debugMenu はデバッグメニューを作る（設計書 10 編 §10.5）。
 func (u *UI) debugMenu() *fyne.Menu {
-	bps := fyne.NewMenuItem("ブレークポイント一覧", func() {
+	bps := fyne.NewMenuItem(i18n.T(i18n.MenuBreakpoints), func() {
 		if u.bpViewer == nil {
 			u.bpViewer = newBreakpointViewer(u)
 		}
 		u.showViewer(u.bpViewer)
 	})
-	u.traceItem = fyne.NewMenuItem("トレースの記録", u.toggleTracing)
-	dump := fyne.NewMenuItem("トレースの書き出し", func() {
+	u.traceItem = fyne.NewMenuItem(i18n.T(i18n.MenuTraceRecord), u.toggleTracing)
+	dump := fyne.NewMenuItem(i18n.T(i18n.MenuTraceDump), func() {
 		path, err := u.emu.DumpTraceDefault()
 		if err != nil {
 			u.showError(err)
 			return
 		}
-		u.status.notify("トレースを " + path + " へ書き出しました")
+		u.status.notify(i18n.T(i18n.StatusTraceDumped, path))
 	})
-	u.traceFileItem = fyne.NewMenuItem("トレースの常時出力", u.toggleTraceFile)
-	logs := fyne.NewMenuItem("ログカテゴリ…", func() { u.showViewer(u.logs()) })
-	u.overlayItem = fyne.NewMenuItem("オーバーレイを有効にする", u.toggleOverlay)
+	u.traceFileItem = fyne.NewMenuItem(i18n.T(i18n.MenuTraceLive), u.toggleTraceFile)
+	logs := fyne.NewMenuItem(i18n.T(i18n.MenuLogCategories), func() { u.showViewer(u.logs()) })
+	u.overlayItem = fyne.NewMenuItem(i18n.T(i18n.MenuOverlayEnabled), u.toggleOverlay)
 	u.overlayItem.Checked = true
-	clearOverlay := fyne.NewMenuItem("オーバーレイを消去", func() {
+	clearOverlay := fyne.NewMenuItem(i18n.T(i18n.MenuOverlayClear), func() {
 		if err := u.emu.ClearOverlay(); err != nil {
 			u.showError(err)
 			return
 		}
-		u.status.notify("オーバーレイを消去しました")
+		u.status.notify(i18n.T(i18n.StatusOverlayCleared))
 	})
-	return fyne.NewMenu("デバッグ", bps, fyne.NewMenuItemSeparator(),
+	return fyne.NewMenu(i18n.T(i18n.MenuDebug), bps, fyne.NewMenuItemSeparator(),
 		u.traceItem, dump, u.traceFileItem, fyne.NewMenuItemSeparator(), logs,
 		fyne.NewMenuItemSeparator(), u.overlayItem, clearOverlay)
 }
@@ -217,7 +220,7 @@ func (u *UI) toggleTraceFile() {
 		u.traceItem.Checked = true
 		u.applyDebugFeatures()
 	}
-	u.status.notify("トレースを " + path + " へ出力しています")
+	u.status.notify(i18n.T(i18n.StatusTraceLive, path))
 	u.refreshMainMenu()
 }
 
@@ -228,18 +231,26 @@ func (u *UI) refreshMainMenu() {
 	}
 }
 
+// settingsMenu は設定メニューを作る（設計書 10 編 §10.5）。
+func (u *UI) settingsMenu() *fyne.Menu {
+	open := fyne.NewMenuItem(i18n.T(i18n.MenuOpenSettings), func() { u.openSettings(settingsTabEmulation) })
+	open.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyComma, Modifier: fyne.KeyModifierShortcutDefault}
+	keys := fyne.NewMenuItem(i18n.T(i18n.MenuOpenKeybindings), func() { u.openSettings(settingsTabInput) })
+	return fyne.NewMenu(i18n.T(i18n.MenuSettings), open, keys)
+}
+
 // helpMenu はヘルプメニューを作る。
 func (u *UI) helpMenu() *fyne.Menu {
-	about := fyne.NewMenuItem("バージョン情報", func() {
-		dialog.ShowCustom("バージョン情報", "閉じる",
+	about := fyne.NewMenuItem(i18n.T(i18n.MenuAbout), func() {
+		dialog.ShowCustom(i18n.T(i18n.MenuAbout), i18n.T(i18n.CommonClose),
 			widget.NewLabel(fmt.Sprintf("%s\n%s", appTitle, u.version)), u.win)
 	})
-	return fyne.NewMenu("ヘルプ", about)
+	return fyne.NewMenu(i18n.T(i18n.MenuHelp), about)
 }
 
 // setScale は拡大率を変え、ウィンドウの大きさを合わせる。
 func (u *UI) setScale(scale int) {
-	u.cfg.Video.Scale = scale
+	u.update(func(c *config.Config) { c.Video.Scale = scale })
 	u.screen.SetScale(scale)
 	if !u.win.FullScreen() {
 		u.win.Resize(u.preferredSize())
@@ -253,10 +264,10 @@ func (u *UI) setScale(scale int) {
 func (u *UI) openROMDialog() {
 	dir, _ := filepath.Abs(u.cfg.Paths.ROMDir)
 	path, err := zenity.SelectFile(
-		zenity.Title("ROM を開く"),
+		zenity.Title(i18n.T(i18n.DialogOpenROM)),
 		zenity.Filename(dir),
 		zenity.FileFilters{{
-			Name:     "NES の ROM (*.nes)",
+			Name:     i18n.T(i18n.FilterNESROM),
 			Patterns: []string{"*.nes"},
 			CaseFold: true,
 		}},
@@ -272,7 +283,15 @@ func (u *UI) openROMDialog() {
 }
 
 // OpenROM は ROM を読み込む。
+//
+// 最近使った ROM の一覧から選んだファイルが無いときは、エラーを出して
+// 一覧から除く。
 func (u *UI) OpenROM(path string) {
+	if _, err := os.Stat(path); err != nil {
+		u.removeRecent(path)
+		u.showError(err)
+		return
+	}
 	if err := u.emu.LoadROM(path); err != nil {
 		u.showError(err)
 		return
@@ -304,21 +323,39 @@ func (u *UI) afterROMChange() {
 	u.releaseAllKeys()
 }
 
-// addRecent は最近使った ROM の一覧へ加える。
-//
-// 同じものは先頭へ移す。この段階では記憶するのはメモリ上のみで、
-// 終了すると失われる。設定ファイルへの保存はフェーズ 12 で行う。
+// addRecent は最近使った ROM の一覧の先頭へ加え、設定に保存する。
+// 同じものは先頭へ移す。
 func (u *UI) addRecent(path string) {
-	for i, p := range u.recent {
-		if p == path {
-			u.recent = append(u.recent[:i], u.recent[i+1:]...)
-			break
+	abs, err := filepath.Abs(path)
+	if err == nil {
+		path = abs
+	}
+	u.update(func(c *config.Config) {
+		list := []config.RecentROM{{Path: path, Name: filepath.Base(path)}}
+		for _, r := range c.UI.RecentROMs {
+			if r.Path != path {
+				list = append(list, r)
+			}
 		}
-	}
-	u.recent = append([]string{path}, u.recent...)
-	if len(u.recent) > maxRecentROMs {
-		u.recent = u.recent[:maxRecentROMs]
-	}
+		if len(list) > config.MaxRecentROMs {
+			list = list[:config.MaxRecentROMs]
+		}
+		c.UI.RecentROMs = list
+	})
+	u.updateRecentMenu()
+}
+
+// removeRecent は一覧から除いて設定に保存する。
+func (u *UI) removeRecent(path string) {
+	u.update(func(c *config.Config) {
+		list := c.UI.RecentROMs[:0:0]
+		for _, r := range c.UI.RecentROMs {
+			if r.Path != path {
+				list = append(list, r)
+			}
+		}
+		c.UI.RecentROMs = list
+	})
 	u.updateRecentMenu()
 }
 
@@ -327,15 +364,15 @@ func (u *UI) updateRecentMenu() {
 	if u.recentItem == nil {
 		return
 	}
-	if len(u.recent) == 0 {
-		empty := fyne.NewMenuItem("（なし）", nil)
+	if len(u.cfg.UI.RecentROMs) == 0 {
+		empty := fyne.NewMenuItem(i18n.T(i18n.CommonNone), nil)
 		empty.Disabled = true
 		u.recentItem.ChildMenu = fyne.NewMenu("", empty)
 		return
 	}
-	items := make([]*fyne.MenuItem, 0, len(u.recent))
-	for _, p := range u.recent {
-		items = append(items, fyne.NewMenuItem(filepath.Base(p), func() { u.OpenROM(p) }))
+	items := make([]*fyne.MenuItem, 0, len(u.cfg.UI.RecentROMs))
+	for _, r := range u.cfg.UI.RecentROMs {
+		items = append(items, fyne.NewMenuItem(r.Name, func() { u.OpenROM(r.Path) }))
 	}
 	u.recentItem.ChildMenu = fyne.NewMenu("", items...)
 	// メニューバーを組み立てている途中はまだ設定されていない。

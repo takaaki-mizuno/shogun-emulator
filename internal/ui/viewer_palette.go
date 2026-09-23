@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image"
 	"image/color"
 
@@ -49,7 +50,7 @@ func (u *UI) palettes() *paletteViewer {
 	return u.paletteViewer
 }
 
-func (v *paletteViewer) Title() string { return "パレット" }
+func (v *paletteViewer) Title() string { return i18n.T(i18n.ViewerPalette) }
 
 func (v *paletteViewer) Content() fyne.CanvasObject {
 	v.src.acquire()
@@ -59,7 +60,7 @@ func (v *paletteViewer) Content() fyne.CanvasObject {
 	v.all = newPixelView(16*paletteCell, 4*paletteCell, 2)
 	v.all.onHover = func(x, y int, ok bool) {
 		if ok {
-			v.info.SetText(fmt.Sprintf("色 $%02X", y/paletteCell*16+x/paletteCell))
+			v.info.SetText(i18n.T(i18n.PalColorN, y/paletteCell*16+x/paletteCell))
 		}
 	}
 	v.preview = newPixelView(4*paletteCell, 8*paletteCell, 2)
@@ -69,30 +70,30 @@ func (v *paletteViewer) Content() fyne.CanvasObject {
 		v.fromMask = false
 		v.drawPreview()
 	}
-	names := []string{"赤", "緑", "青"}
-	row := container.NewHBox(widget.NewLabel("プレビュー:"))
+	names := []string{i18n.T(i18n.PalRed), i18n.T(i18n.PalGreen), i18n.T(i18n.PalBlue)}
+	row := container.NewHBox(widget.NewLabel(i18n.T(i18n.PalPreviewLabel)))
 	for i := range v.emphasis {
-		v.emphasis[i] = widget.NewCheck("強調 "+names[i], onUser)
+		v.emphasis[i] = widget.NewCheck(i18n.T(i18n.PalEmphasis, names[i]), onUser)
 		row.Add(v.emphasis[i])
 	}
-	v.greyscale = widget.NewCheck("グレースケール", onUser)
+	v.greyscale = widget.NewCheck(i18n.T(i18n.PalGreyscale), onUser)
 	row.Add(v.greyscale)
-	row.Add(widget.NewButton("$2001 に合わせる", func() {
+	row.Add(widget.NewButton(i18n.T(i18n.PalFromMask), func() {
 		v.fromMask = true
 		v.drawPreview()
 	}))
 
 	grids := container.NewHBox(
-		container.NewVBox(widget.NewLabel("パレット RAM（上 4 行が背景、下 4 行がスプライト）"), v.entries),
-		container.NewVBox(widget.NewLabel("プレビュー"), v.preview),
+		container.NewVBox(widget.NewLabel(i18n.T(i18n.PalRAMTitle)), v.entries),
+		container.NewVBox(widget.NewLabel(i18n.T(i18n.PalPreview)), v.preview),
 		v.table,
 	)
 	body := container.NewVBox(
 		grids,
-		widget.NewLabel("64 色（赤い × の $0D は使わない）"), v.all,
+		widget.NewLabel(i18n.T(i18n.PalAllColors)), v.all,
 		row, v.info,
 	)
-	bar := container.NewHBox(v.src.lineSelector(v.Refresh), widget.NewLabel("エントリをクリックすると色を選べる"))
+	bar := container.NewHBox(v.src.lineSelector(v.Refresh), widget.NewLabel(i18n.T(i18n.PalHint)))
 	v.Refresh()
 	return container.NewBorder(bar, nil, nil, nil, container.NewScroll(body))
 }
@@ -147,9 +148,9 @@ func (v *paletteViewer) draw() {
 
 	rows := make([]widget.TextGridRow, 0, 8)
 	for g := range 8 {
-		name := fmt.Sprintf("背景 %d     ", g)
+		name := i18n.T(i18n.PalBGGroup, g)
 		if g >= 4 {
-			name = fmt.Sprintf("スプライト %d", g-4)
+			name = i18n.T(i18n.PalSpriteGroup, g-4)
 		}
 		text := name
 		for k := range 4 {
@@ -157,10 +158,10 @@ func (v *paletteViewer) draw() {
 			text += fmt.Sprintf("  $%04X=$%02X", 0x3F00+i, entryValue(snap, i))
 		}
 		if g == 0 {
-			text += "  （$3F00 は backdrop）"
+			text += i18n.T(i18n.PalBackdropNote)
 		}
 		if g == 4 {
-			text += "  （$3F10 などは $3F00 などと同じ記憶域）"
+			text += i18n.T(i18n.PalMirrorNote)
 		}
 		rows = append(rows, textRow(text, nil))
 	}
@@ -208,7 +209,7 @@ func (v *paletteViewer) hover(x, y int, ok bool) {
 	i := y/paletteCell*4 + x/paletteCell
 	text := fmt.Sprintf("$%04X = $%02X", 0x3F00+i, entryValue(&v.src.snap, i))
 	if s := paletteSlot(i); s != i {
-		text += fmt.Sprintf("（$%04X と同じ記憶域）", 0x3F00+s)
+		text += i18n.T(i18n.PalSameSlot, 0x3F00+s)
 	}
 	v.info.SetText(text)
 }
@@ -230,7 +231,7 @@ func (v *paletteViewer) edit(i int) {
 		d.Hide()
 		v.setColor(i, uint8(y/paletteCell*16+x/paletteCell))
 	}
-	d = dialog.NewCustom(fmt.Sprintf("$%04X の色", 0x3F00+i), "取り消し", picker, v.u.win)
+	d = dialog.NewCustom(i18n.T(i18n.PalColorDialog, 0x3F00+i), i18n.T(i18n.CommonCancel), picker, v.u.win)
 	d.Show()
 }
 

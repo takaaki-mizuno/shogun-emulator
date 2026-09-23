@@ -387,6 +387,11 @@ func TestNoMapIterationInEmulationCore(t *testing.T) {
 func TestCoreImportsOnlyStdlibAndModule(t *testing.T) {
     // internal/nes が依存するのは標準ライブラリとモジュール内のパッケージだけである
 }
+
+func TestUITextLivesInCatalog(t *testing.T) {
+    // internal/ui の _test.go 以外のファイル（internal/ui/i18n を除く）に
+    // 日本語の文字列リテラルが無いことを検証する（「10 GUI 設計」§10.9）
+}
 ```
 
 対象のパッケージがまだ存在しないとき、検査は失敗せずに飛ばす。段階ごとにパッケージが増えるため、

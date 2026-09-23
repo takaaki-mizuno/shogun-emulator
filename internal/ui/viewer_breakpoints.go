@@ -1,7 +1,8 @@
 package ui
 
 import (
-	"fmt"
+	"errors"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"strconv"
 	"strings"
 
@@ -29,7 +30,7 @@ type breakpointPanel struct {
 }
 
 // breakKindLabels は種別の選択肢。debug.BreakKind の順に並べる。
-var breakKindLabels = []string{"実行", "読み出し", "書き込み", "PPU 位置", "イベント"}
+var breakKindLabels = []string{i18n.T(i18n.MenuRun), i18n.T(i18n.BPKindRead), i18n.T(i18n.BPKindWrite), i18n.T(i18n.BPKindPPU), i18n.T(i18n.BPKindEvent)}
 
 // eventLabels はイベントの選択肢。debug.EventKind の順に並べる。
 func eventLabels() []string {
@@ -48,8 +49,8 @@ func newBreakpointPanel(u *UI) *breakpointPanel {
 		func() fyne.CanvasObject {
 			check := widget.NewCheck("", nil)
 			label := widget.NewLabel("")
-			cond := widget.NewButton("条件…", nil)
-			del := widget.NewButton("削除", nil)
+			cond := widget.NewButton(i18n.T(i18n.BPConditionButton), nil)
+			del := widget.NewButton(i18n.T(i18n.CommonDelete), nil)
 			return container.NewBorder(nil, nil, check, container.NewHBox(cond, del), label)
 		},
 		func(i widget.ListItemID, o fyne.CanvasObject) {
@@ -61,7 +62,7 @@ func newBreakpointPanel(u *UI) *breakpointPanel {
 			label := row.Objects[0].(*widget.Label)
 			check := row.Objects[1].(*widget.Check)
 			buttons := row.Objects[2].(*fyne.Container)
-			label.SetText(fmt.Sprintf("#%d %s（%d 回）", b.ID, b.Describe(), b.HitCount))
+			label.SetText(i18n.T(i18n.BPRow, b.ID, b.Describe(), b.HitCount))
 			check.OnChanged = nil
 			check.SetChecked(b.Enabled)
 			id := b.ID
@@ -73,17 +74,17 @@ func newBreakpointPanel(u *UI) *breakpointPanel {
 
 	p.kind = widget.NewSelect(breakKindLabels, func(string) { p.updateInputs() })
 	p.addr = widget.NewEntry()
-	p.addr.SetPlaceHolder("$C000 または $0300-$03FF（PPU 位置は 行,ドット）")
+	p.addr.SetPlaceHolder(i18n.T(i18n.BPAddrPlaceholder))
 	p.event = widget.NewSelect(eventLabels(), nil)
 	p.condition = widget.NewEntry()
-	p.condition.SetPlaceHolder("条件（例: A == $42 && X < $10）")
-	add := widget.NewButton("追加", p.add)
+	p.condition.SetPlaceHolder(i18n.T(i18n.BPConditionPlaceholder))
+	add := widget.NewButton(i18n.T(i18n.CommonAdd), p.add)
 	p.kind.SetSelectedIndex(0)
 	p.event.SetSelectedIndex(0)
 
 	form := container.NewVBox(
 		container.NewBorder(nil, nil, p.kind, add, p.addr),
-		container.NewBorder(nil, nil, widget.NewLabel("イベント"), nil, p.event),
+		container.NewBorder(nil, nil, widget.NewLabel(i18n.T(i18n.BPKindEvent)), nil, p.event),
 		p.condition,
 	)
 	p.root = container.NewBorder(nil, form, nil, nil, p.list)
@@ -176,12 +177,12 @@ func parseAddrRange(s string) (uint16, uint16, error) {
 func parsePPUPosition(s string) (int, int, error) {
 	parts := strings.SplitN(s, ",", 2)
 	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("PPU 位置は 行,ドット の形で入力する（%q）", s)
+		return 0, 0, errors.New(i18n.T(i18n.BPPPUFormat, s))
 	}
 	line, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
 	dot, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
 	if err1 != nil || err2 != nil || line < 0 || line > 311 || dot < 0 || dot > 340 {
-		return 0, 0, fmt.Errorf("PPU 位置が範囲外である（%q）", s)
+		return 0, 0, errors.New(i18n.T(i18n.BPPPURange, s))
 	}
 	return line, dot, nil
 }
@@ -206,8 +207,8 @@ func (p *breakpointPanel) editCondition(id int, current *debug.Condition) {
 	if current != nil {
 		entry.SetText(current.Expr)
 	}
-	dialog.ShowForm("条件式", "設定", "取り消し",
-		[]*widget.FormItem{widget.NewFormItem("条件", entry)},
+	dialog.ShowForm(i18n.T(i18n.BPConditionTitle), i18n.T(i18n.MenuSettings), i18n.T(i18n.CommonCancel),
+		[]*widget.FormItem{widget.NewFormItem(i18n.T(i18n.BPConditionField), entry)},
 		func(ok bool) {
 			if !ok {
 				return
@@ -234,7 +235,7 @@ type breakpointViewer struct {
 // newBreakpointViewer はビューアを作る。
 func newBreakpointViewer(u *UI) *breakpointViewer { return &breakpointViewer{u: u} }
 
-func (v *breakpointViewer) Title() string { return "ブレークポイント" }
+func (v *breakpointViewer) Title() string { return i18n.T(i18n.ViewerBreakpoints) }
 
 func (v *breakpointViewer) Content() fyne.CanvasObject {
 	v.panel = newBreakpointPanel(v.u)

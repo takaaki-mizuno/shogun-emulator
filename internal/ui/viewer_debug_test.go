@@ -59,6 +59,7 @@ func newDebugTestUI(t testing.TB) *UI {
 
 	cfg := config.Default()
 	u := &UI{
+		app:     a,
 		emu:     e,
 		cfg:     cfg,
 		pressed: map[string]bool{},
@@ -289,3 +290,6 @@ func TestBreakShowsCPUDebugger(t *testing.T) {
 		t.Errorf("止まった理由 = %q", u.emu.Status().Break)
 	}
 }
+
+// writeFile はテスト用のファイルを書く。
+func writeFile(path string, data []byte) error { return os.WriteFile(path, data, 0o644) }

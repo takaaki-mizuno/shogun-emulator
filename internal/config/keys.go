@@ -266,7 +266,7 @@ func dedupeActions(a []Action) []Action {
 // 並ぶ物理配置と一致させるためである。
 func DefaultKeybindings() *Keybindings {
 	return &Keybindings{
-		Version: Version,
+		Version: KeybindingsVersion,
 		Players: []PlayerBindings{
 			{
 				Player: 1,

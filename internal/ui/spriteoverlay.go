@@ -15,8 +15,7 @@ var colorSpriteBox = color.NRGBA{R: 0xFF, G: 0x30, B: 0x30, A: 0xD0}
 // spriteOverlay はメイン画面の上にスプライトの矩形を重ねるウィジェット
 // （設計書 09 編 §9.4.3）。
 //
-// 矩形は NES の画面座標で受け取り、画像が実際に描かれている範囲へ写す。
-// 画像は縦横比を保って中央に置かれるため、その範囲を画像の縦横比から求める。
+// 矩形は NES の画面座標で受け取り、画像の範囲へ写す。
 type spriteOverlay struct {
 	widget.BaseWidget
 	img *canvas.Image
@@ -68,25 +67,18 @@ func (r *spriteOverlayRenderer) Refresh() {
 	canvas.Refresh(r.o)
 }
 
-// Layout は矩形を画像の描かれている範囲へ写す。
+// Layout は矩形を画像の範囲へ写す。重ねる層は画像と同じ矩形に置かれ、
+// 画像はその矩形いっぱいに描かれる（screenLayout）。
 func (r *spriteOverlayRenderer) Layout(size fyne.Size) {
 	o := r.o
 	if o.src.Empty() || size.Width <= 0 || size.Height <= 0 {
 		return
 	}
-	aspect := float32(o.src.Dx()) / float32(o.src.Dy())
-	w, h := size.Width, size.Height
-	if w/h > aspect {
-		w = h * aspect
-	} else {
-		h = w / aspect
-	}
-	ox, oy := (size.Width-w)/2, (size.Height-h)/2
-	sx, sy := w/float32(o.src.Dx()), h/float32(o.src.Dy())
+	sx, sy := size.Width/float32(o.src.Dx()), size.Height/float32(o.src.Dy())
 	for i, b := range o.boxes {
 		rect := r.rects[i]
 		b = b.Sub(o.src.Min)
-		rect.Move(fyne.NewPos(ox+float32(b.Min.X)*sx, oy+float32(b.Min.Y)*sy))
+		rect.Move(fyne.NewPos(float32(b.Min.X)*sx, float32(b.Min.Y)*sy))
 		rect.Resize(fyne.NewSize(float32(b.Dx())*sx, float32(b.Dy())*sy))
 	}
 }

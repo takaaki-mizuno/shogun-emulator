@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/cart"
 )
@@ -40,11 +39,7 @@ type OverlayStatus struct {
 
 // patchesPath は ROM のオーバーレイの保存先を返す。
 func (e *Emulator) patchesPath(rom *cart.ROM) string {
-	dir, err := config.PatchesDir(e.cfg.PatchesDir)
-	if err != nil {
-		dir = config.PatchesDirName
-	}
-	return filepath.Join(dir, cart.ROMKeyString(rom.Hash[:])+".json")
+	return filepath.Join(e.cfg.Dirs.PatchesDir(e.cfg.PatchesDir), cart.ROMKeyString(rom.Hash[:])+".json")
 }
 
 // loadOverlay はファイルからオーバーレイを読み込んで ROM へ当てる。

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/state"
 )
 
@@ -165,11 +164,7 @@ func (e *Emulator) slotDir() (string, error) {
 	if key == "" {
 		return "", errNoROM
 	}
-	dir, err := config.StateDir(e.cfg.Paths.StateDir)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, key), nil
+	return filepath.Join(e.cfg.Dirs.StateDir(e.cfg.Paths.StateDir), key), nil
 }
 
 // slotPath はスロットのファイルのパスを返す。

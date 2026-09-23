@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image"
 	"image/color"
 	"strconv"
@@ -17,8 +18,8 @@ import (
 // patternPaletteLabels はパターンテーブルに当てるパレットの選択肢。
 // 0 がグレースケール、1-4 が背景 0-3、5-8 がスプライト 0-3。
 var patternPaletteLabels = []string{
-	"グレースケール", "背景 0", "背景 1", "背景 2", "背景 3",
-	"スプライト 0", "スプライト 1", "スプライト 2", "スプライト 3",
+	i18n.T(i18n.PalGreyscale), i18n.T(i18n.PatBG0), i18n.T(i18n.PatBG1), i18n.T(i18n.PatBG2), i18n.T(i18n.PatBG3),
+	i18n.T(i18n.PatSprite0), i18n.T(i18n.PatSprite1), i18n.T(i18n.PatSprite2), i18n.T(i18n.PatSprite3),
 }
 
 // zoomLabels は拡大率の選択肢。
@@ -47,7 +48,7 @@ func (u *UI) patterns() *patternViewer {
 	return u.patternViewer
 }
 
-func (v *patternViewer) Title() string { return "パターンテーブル" }
+func (v *patternViewer) Title() string { return i18n.T(i18n.ViewerPattern) }
 
 func (v *patternViewer) Content() fyne.CanvasObject {
 	v.open = true
@@ -67,7 +68,7 @@ func (v *patternViewer) Content() fyne.CanvasObject {
 		v.draw()
 	})
 	pal.SetSelectedIndex(v.palette)
-	tall := widget.NewCheck("8×16 の並び", func(on bool) {
+	tall := widget.NewCheck(i18n.T(i18n.PatTall), func(on bool) {
 		v.tall = on
 		v.draw()
 	})
@@ -78,7 +79,7 @@ func (v *patternViewer) Content() fyne.CanvasObject {
 	})
 	zoom.SetSelected(strconv.Itoa(v.view.zoom))
 
-	bar := container.NewHBox(pal, tall, widget.NewLabel("拡大"), zoom, v.src.lineSelector(v.Refresh))
+	bar := container.NewHBox(pal, tall, widget.NewLabel(i18n.T(i18n.CommonZoom)), zoom, v.src.lineSelector(v.Refresh))
 	v.Refresh()
 	return container.NewBorder(bar, container.NewVBox(v.info, v.banks), nil, nil,
 		container.NewScroll(container.NewCenter(v.view)))
@@ -91,7 +92,7 @@ func (v *patternViewer) Refresh() {
 	}
 	v.draw()
 	var b strings.Builder
-	b.WriteString("バンク構成: ")
+	b.WriteString(i18n.T(i18n.PatBanks))
 	for i, bank := range v.src.snap.BankView {
 		if i > 0 {
 			b.WriteString("  ")
@@ -169,11 +170,11 @@ func (v *patternViewer) hover(x, y int, ok bool) {
 	}
 	table, tile := v.tileAt(x/8, y/8)
 	addr := uint16(table*0x1000 + tile*16)
-	text := fmt.Sprintf("タイル $%02X  CHR $%04X", tile, addr)
+	text := i18n.T(i18n.PatHover, tile, addr)
 	if off, found := debug.CHROffset(v.src.snap.BankView, addr); found {
 		for _, b := range v.src.snap.BankView {
 			if addr >= b.CPUOrPPUAddr && int(addr) < int(b.CPUOrPPUAddr)+b.Size {
-				text += fmt.Sprintf("  %s バンク %d（オフセット $%05X）", b.SourceKind, b.BankIndex, off)
+				text += i18n.T(i18n.PatBankInfo, b.SourceKind, b.BankIndex, off)
 				break
 			}
 		}
@@ -227,7 +228,7 @@ func (u *UI) openTileEditor(addr uint16, palette int) {
 	u.showViewer(ed)
 }
 
-func (ed *tileEditor) Title() string { return fmt.Sprintf("タイル $%04X", ed.addr) }
+func (ed *tileEditor) Title() string { return i18n.T(i18n.TileEditorTitle, ed.addr) }
 
 func (ed *tileEditor) Content() fyne.CanvasObject {
 	ed.view = newPixelView(8, 8, 32)
@@ -245,13 +246,13 @@ func (ed *tileEditor) Content() fyne.CanvasObject {
 	row := container.NewHBox()
 	for i := range 4 {
 		c := uint8(i)
-		ed.colors[i] = widget.NewButton(fmt.Sprintf("色 %d", i), func() {
+		ed.colors[i] = widget.NewButton(i18n.T(i18n.TileColorN, i), func() {
 			ed.current = c
 			ed.drawButtons()
 		})
 		row.Add(ed.colors[i])
 	}
-	undo := widget.NewButton("元に戻す", ed.undoLast)
+	undo := widget.NewButton(i18n.T(i18n.CommonUndo), ed.undoLast)
 	ed.Refresh()
 	return container.NewBorder(container.NewVBox(row, undo), ed.status, nil, nil, container.NewCenter(ed.view))
 }

@@ -119,3 +119,16 @@ func keyCode(name fyne.KeyName) (string, bool) {
 	code, ok := fyneKeyToCode[name]
 	return code, ok
 }
+
+// knownCodes は変換表にあるキーコードの集合。
+var knownCodes = func() map[string]bool {
+	m := map[string]bool{}
+	for _, code := range fyneKeyToCode {
+		m[code] = true
+	}
+	return m
+}()
+
+// KnownKeyCode はキーコードが変換表にあるかを返す。キーバインドファイルの
+// 読み込みで、知らないキーコードを除くために使う（設計書 11 編 §11.4）。
+func KnownKeyCode(code string) bool { return knownCodes[code] }

@@ -28,29 +28,24 @@ const headlessDefaultFrames = 60 * 60 * 60
 // runHeadless は画面を作らずにエミュレーションだけを実行する。
 //
 // オーディオデバイスを開かない。進行の駆動をオーディオに依存させず、
-// 可能な速度で実行する（設計書 11 編 §11.5.2）。
-func runHeadless(cfg *config.Config, opts options, stdout, stderr io.Writer) int {
+// 可能な速度で実行する（設計書 11 編 §11.5.2）。設定ファイルへは書かない。
+func runHeadless(store *config.Store, opts options, logOut io.Writer, stdout, stderr io.Writer) int {
+	cfg := store.Config().Clone()
 	cfg.Audio.Enabled = false
 
-	e := emu.New(emu.Config{
-		Emulation: cfg.Emulation,
-		Input:     cfg.Input,
-		Audio:     cfg.Audio,
-		Paths:     cfg.Paths,
-		State:     cfg.State,
-		Movie:     cfg.Movie,
-		AppName:   appTitle,
-		Version:   version,
-		Commit:    commit,
-		NewPacer:  func(*region.Region) emu.Pacer { return emu.NewNoPacer() },
-		Warn: func(format string, args ...any) {
-			fmt.Fprintf(stderr, "%s: "+format+"\n", append([]any{appName}, args...)...)
-		},
-		Notify: func(msg string) { fmt.Fprintf(stdout, "%s\n", msg) },
-	})
+	ec := emuConfig(cfg, store.Paths, logOut, stderr)
+	ec.NewPacer = func(*region.Region) emu.Pacer { return emu.NewNoPacer() }
+	// 読み込んだ直後から進めない。--frames の数とトレースの先頭を正確にする。
+	ec.StartPaused = true
+	ec.Notify = func(msg string) { fmt.Fprintf(stdout, "%s\n", msg) }
+	e := emu.New(ec)
 	e.Start()
 	defer e.Stop()
 
+	if opts.breakAt != "" {
+		addrs, _ := parseBreakAddrs(opts.breakAt)
+		e.SetStartupBreakpoints(addrs)
+	}
 	if err := e.LoadROM(opts.romPath); err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", appName, err)
 		return exitROMError
@@ -59,6 +54,12 @@ func runHeadless(cfg *config.Config, opts options, stdout, stderr io.Writer) int
 		if err := e.LoadFromFile(opts.loadState); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
 			return exitROMError
+		}
+	}
+	if opts.traceLog != "" {
+		if err := e.StartTraceLog(opts.traceLog); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+			return exitBadArgs
 		}
 	}
 
@@ -84,6 +85,11 @@ func runHeadless(cfg *config.Config, opts options, stdout, stderr io.Writer) int
 
 	code := runHeadlessFrames(e, opts, frames, stdout)
 
+	if opts.traceLog != "" {
+		if err := e.StopTraceFile(); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+		}
+	}
 	if opts.recordMovie != "" {
 		if err := e.StopRecordingMovie(); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
@@ -92,6 +98,12 @@ func runHeadless(cfg *config.Config, opts options, stdout, stderr io.Writer) int
 	if opts.saveStateOnExit != "" {
 		if err := e.SaveToFile(opts.saveStateOnExit); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+		}
+	}
+	if opts.screenshot != "" {
+		if err := e.SaveScreenshot(opts.screenshot); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+			return exitROMError
 		}
 	}
 	return code
@@ -115,6 +127,11 @@ func runHeadlessFrames(e *emu.Emulator, opts options, frames int, stdout io.Writ
 		if err := e.DesyncError(); err != nil {
 			fmt.Fprintf(stdout, "%v\n", err)
 			return exitMovieDesync
+		}
+		if reason := e.Status().Break; reason != "" {
+			// --break-at のブレークポイントで止まった。理由を出して終える。
+			fmt.Fprintf(stdout, "停止: %s\n", reason)
+			return exitOK
 		}
 		if opts.moviePath != "" && !e.Status().Movie.Playing {
 			break

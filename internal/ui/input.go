@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"path/filepath"
 	"time"
 
@@ -15,6 +16,11 @@ import (
 func (u *UI) onKeyDown(ev *fyne.KeyEvent) {
 	code, ok := keyCode(ev.Name)
 	if !ok {
+		return
+	}
+	if u.keyCapture {
+		// キーバインドの取り込み中はホットキーを処理しない。F5 を割り当てる
+		// ときにセーブステートが走らないようにする（設計書 10 編 §10.8.1）。
 		return
 	}
 	// キーリピートを無視する。押し続けで何度も処理すると、一時停止の
@@ -91,9 +97,9 @@ func (u *UI) doAction(a config.Action, pressed bool) {
 	case config.ActionLoadState:
 		u.quickLoad()
 	case config.ActionNextSlot:
-		u.status.notify(fmt.Sprintf("スロット %d を選びました", u.emu.NextSlot()))
+		u.status.notify(i18n.T(i18n.StatusSlotSelected, u.emu.NextSlot()))
 	case config.ActionPrevSlot:
-		u.status.notify(fmt.Sprintf("スロット %d を選びました", u.emu.PrevSlot()))
+		u.status.notify(i18n.T(i18n.StatusSlotSelected, u.emu.PrevSlot()))
 	}
 }
 
@@ -138,8 +144,9 @@ func (u *UI) toggleMute() {
 
 // toggleFullscreen はフルスクリーンを切り替える。
 func (u *UI) toggleFullscreen() {
-	u.cfg.Video.Fullscreen = !u.win.FullScreen()
-	u.win.SetFullScreen(u.cfg.Video.Fullscreen)
+	full := !u.win.FullScreen()
+	u.update(func(c *config.Config) { c.Video.Fullscreen = full })
+	u.win.SetFullScreen(full)
 }
 
 // saveScreenshot は表示中のフレームを PNG として保存する。
@@ -151,17 +158,14 @@ func (u *UI) saveScreenshot() error {
 	if !s.Loaded {
 		return nil
 	}
-	dir, err := config.ScreenshotDir(u.cfg.Paths.ScreenshotDir)
-	if err != nil {
-		return err
-	}
+	dir := u.emu.Dirs().ScreenshotDir(u.cfg.Paths.ScreenshotDir)
 	name := fmt.Sprintf("%s-%s.png", s.ROMName, time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, name)
 	if err := video.SavePNG(u.screen.Frame(), u.pal, u.screen.Overscan(),
 		u.screen.PictureHeight(), path); err != nil {
 		return err
 	}
-	u.status.notify(fmt.Sprintf("%s を保存しました", path))
+	u.status.notify(i18n.T(i18n.StatusSaved, path))
 	return nil
 }
 

@@ -101,6 +101,9 @@ type Breakpoint struct {
 	Enabled   bool
 	// HitCount は条件を満たして止まった回数。
 	HitCount uint64
+	// Temporary は保存しないブレークポイントであることを表す。引数と設定で
+	// 置いたものが使う（設計書 09 編 §9.9）。
+	Temporary bool
 }
 
 // Describe は一覧に表示する説明を返す。

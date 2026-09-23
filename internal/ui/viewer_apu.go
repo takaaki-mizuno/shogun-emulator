@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -45,7 +46,7 @@ func (v *apuViewer) Content() fyne.CanvasObject {
 	controls := container.NewGridWithColumns(3)
 	for i, name := range apuChannelNames {
 		bit := uint8(1) << i
-		v.mutes[i] = widget.NewCheck(name+" をミュート", func(on bool) {
+		v.mutes[i] = widget.NewCheck(i18n.T(i18n.APUMute, name), func(on bool) {
 			if v.updating {
 				return
 			}
@@ -56,15 +57,15 @@ func (v *apuViewer) Content() fyne.CanvasObject {
 			}
 		})
 		controls.Add(v.mutes[i])
-		controls.Add(widget.NewButton(name+" だけ鳴らす", func() { v.setMask(0x1F &^ bit) }))
+		controls.Add(widget.NewButton(i18n.T(i18n.APUSolo, name), func() { v.setMask(0x1F &^ bit) }))
 		controls.Add(widget.NewLabel(""))
 	}
-	all := widget.NewButton("すべて鳴らす", func() { v.setMask(0) })
+	all := widget.NewButton(i18n.T(i18n.APUUnmuteAll), func() { v.setMask(0) })
 	v.ring = widget.NewProgressBar()
 	v.ringL = widget.NewLabel("")
 	v.Refresh()
 	bottom := container.NewVBox(
-		container.NewBorder(nil, nil, widget.NewLabel("リングバッファ"), v.ringL, v.ring),
+		container.NewBorder(nil, nil, widget.NewLabel(i18n.T(i18n.APURingBuffer)), v.ringL, v.ring),
 		controls, all,
 	)
 	return container.NewBorder(nil, bottom, nil, nil, container.NewScroll(v.grid))
@@ -102,7 +103,7 @@ func (v *apuViewer) Refresh() {
 		}
 	})
 	if !loaded {
-		v.grid.SetText("ROM が読み込まれていない")
+		v.grid.SetText(i18n.T(i18n.APUNoROM))
 		return
 	}
 	v.mask = in.Mute
@@ -112,10 +113,10 @@ func (v *apuViewer) Refresh() {
 	st := v.u.emu.Status()
 	if st.AudioHigh > 0 {
 		v.ring.SetValue(min(float64(st.AudioFill)/float64(st.AudioHigh), 1))
-		v.ringL.SetText(fmt.Sprintf("%d / %d（音切れ %d）", st.AudioFill, st.AudioHigh, st.AudioUnderruns))
+		v.ringL.SetText(i18n.T(i18n.APURingFill, st.AudioFill, st.AudioHigh, st.AudioUnderruns))
 	} else {
 		v.ring.SetValue(0)
-		v.ringL.SetText("音声なし")
+		v.ringL.SetText(i18n.T(i18n.StatusAudioNone))
 	}
 }
 
@@ -124,43 +125,43 @@ func formatAPU(in apu.Inspection) string {
 	var b strings.Builder
 	muted := func(i int) string {
 		if in.Mute&(1<<i) != 0 {
-			return "（ミュート）"
+			return i18n.T(i18n.APUMutedMark)
 		}
 		return ""
 	}
 	for i, p := range in.Pulse {
-		env := fmt.Sprintf("エンベロープ %d（ループ %v）", p.EnvelopeParam, p.EnvelopeLoop)
+		env := i18n.T(i18n.APUEnvelope, p.EnvelopeParam, p.EnvelopeLoop)
 		if p.Constant {
-			env = "一定音量"
+			env = i18n.T(i18n.APUConstantVolume)
 		}
 		fmt.Fprintf(&b, "Pulse %d%s\n", i+1, muted(i))
-		fmt.Fprintf(&b, "  周期 $%03X  デューティ %d  音量 %2d  %s\n", p.Period, p.Duty, p.Volume, env)
-		fmt.Fprintf(&b, "  レングス %3d（停止 %v）  スイープ 有効 %v 反転 %v シフト %d 周期 %d  出力 %2d\n",
+		fmt.Fprintf(&b, i18n.T(i18n.APUPulseLine1), p.Period, p.Duty, p.Volume, env)
+		fmt.Fprintf(&b, i18n.T(i18n.APUPulseLine2),
 			p.Length, p.Halt, p.SweepEnabled, p.SweepNegate, p.SweepShift, p.SweepPeriod, p.Output)
 	}
 	t := in.Triangle
 	fmt.Fprintf(&b, "Triangle%s\n", muted(2))
-	fmt.Fprintf(&b, "  周期 $%03X  リニアカウンタ %3d（再読込 %3d）  レングス %3d  シーケンス %2d  出力 %2d\n",
+	fmt.Fprintf(&b, i18n.T(i18n.APUTriangleLine),
 		t.Period, t.LinearCounter, t.LinearReload, t.Length, t.Sequence, t.Output)
 	n := in.Noise
-	mode := "長周期"
+	mode := i18n.T(i18n.APULongMode)
 	if n.Mode {
-		mode = "短周期"
+		mode = i18n.T(i18n.APUShortMode)
 	}
 	fmt.Fprintf(&b, "Noise%s\n", muted(3))
-	fmt.Fprintf(&b, "  周期 %4d  モード %s  LFSR $%04X  音量 %2d  レングス %3d  出力 %2d\n",
+	fmt.Fprintf(&b, i18n.T(i18n.APUNoiseLine),
 		n.Period, mode, n.LFSR, n.Volume, n.Length, n.Output)
 	d := in.DMC
 	fmt.Fprintf(&b, "DMC%s\n", muted(4))
-	fmt.Fprintf(&b, "  出力レベル %3d  レート %2d  サンプル $%04X（%d バイト）  現在 $%04X  残り %d\n",
+	fmt.Fprintf(&b, i18n.T(i18n.APUDMCLine1),
 		d.OutputLevel, d.Rate, d.SampleAddr, d.SampleLength, d.CurrentAddr, d.BytesRemaining)
-	fmt.Fprintf(&b, "  ループ %v  IRQ 有効 %v  IRQ %v\n", d.Loop, d.IRQEnabled, d.IRQ)
+	fmt.Fprintf(&b, i18n.T(i18n.APUDMCLine2), d.Loop, d.IRQEnabled, d.IRQ)
 	f := in.Frame
-	fmode := "4 ステップ"
+	fmode := i18n.T(i18n.APUFourStep)
 	if f.FiveStep {
-		fmode = "5 ステップ"
+		fmode = i18n.T(i18n.APUFiveStep)
 	}
-	fmt.Fprintf(&b, "フレームカウンタ\n  モード %s  APU サイクル %d  IRQ 禁止 %v  IRQ %v",
+	fmt.Fprintf(&b, i18n.T(i18n.APUFrameCounter),
 		fmode, f.APUCycles, f.IRQInhibit, f.IRQ)
 	return b.String()
 }

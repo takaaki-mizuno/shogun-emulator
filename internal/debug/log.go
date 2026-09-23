@@ -115,6 +115,8 @@ type Logger struct {
 	mu      sync.Mutex
 	entries []Entry
 	start   int
+	// repeats は warn.compat と error の内容ごとの記録の回数。
+	repeats map[string]int
 }
 
 // NewLogger はログを作る。w が nil のとき出力先を持たず、ログビューア
@@ -127,9 +129,27 @@ func NewLogger(cats Category, w io.Writer) *Logger {
 	return l
 }
 
+// 同じ内容の warn.compat と error を記録する回数の上限と、覚えておく内容の
+// 種類の上限（設計書 09 編 §9.8）。
+const (
+	maxRepeats      = 3
+	maxRepeatTracks = 1000
+)
+
 // Log はカテゴリ c の 1 行を記録する。有効かどうかは呼び出し側が確かめる。
+//
+// warn.compat と error は同じ内容を maxRepeats 回まで記録する。毎フレーム
+// 同じ事象を起こすプログラムで出力が埋まらないようにするためである。
 func (l *Logger) Log(c Category, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
+	if c&(CatWarnCompat|CatError) != 0 {
+		switch n := l.countRepeat(msg); {
+		case n == maxRepeats+1:
+			msg += "（同じ内容が続くため、以降は記録しない）"
+		case n > maxRepeats+1:
+			return
+		}
+	}
 	if l.slog != nil {
 		level := slog.LevelDebug
 		switch c {
@@ -141,6 +161,24 @@ func (l *Logger) Log(c Category, format string, args ...any) {
 		l.slog.Log(context.Background(), level, msg, "category", c.String())
 	}
 	l.keep(Entry{Time: time.Now(), Category: c, Message: msg})
+}
+
+// countRepeat は msg を記録した回数を数え、その回数を返す。
+func (l *Logger) countRepeat(msg string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.repeats == nil || len(l.repeats) >= maxRepeatTracks {
+		l.repeats = map[string]int{}
+	}
+	l.repeats[msg]++
+	return l.repeats[msg]
+}
+
+// ResetRepeats は同じ内容の記録の数を数え直す。ROM を読み込んだときに呼ぶ。
+func (l *Logger) ResetRepeats() {
+	l.mu.Lock()
+	l.repeats = nil
+	l.mu.Unlock()
 }
 
 // Warnf は warn.compat を記録する。有効でなければ何もしない。

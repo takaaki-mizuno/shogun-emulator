@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image/color"
 	"strconv"
 	"strings"
@@ -72,7 +74,7 @@ func registerName(r debug.Register) string {
 	return "?"
 }
 
-func (v *cpuViewer) Title() string { return "CPU デバッガ" }
+func (v *cpuViewer) Title() string { return i18n.T(i18n.ViewerCPU) }
 
 // Content は表示を組み立て、CPU の表示に必要なフックを有効にする。
 func (v *cpuViewer) Content() fyne.CanvasObject {
@@ -84,7 +86,7 @@ func (v *cpuViewer) Content() fyne.CanvasObject {
 
 	v.grid = newTapGrid()
 	v.grid.onTap = v.selectRow
-	v.cursorLbl = widget.NewLabel("カーソル: なし")
+	v.cursorLbl = widget.NewLabel(i18n.T(i18n.CPUCursorNone))
 
 	v.regs = map[debug.Register]*widget.Entry{}
 	regForm := container.NewGridWithColumns(4)
@@ -105,26 +107,26 @@ func (v *cpuViewer) Content() fyne.CanvasObject {
 
 	e := v.u.emu
 	buttons := container.NewGridWithColumns(5,
-		widget.NewButton("実行", func() { e.Resume() }),
-		widget.NewButton("停止", func() { e.Pause() }),
-		widget.NewButton("サイクル", func() { e.Step(emu.StepCycle) }),
-		widget.NewButton("命令", func() { e.Step(emu.StepInstruction) }),
-		widget.NewButton("オーバー", func() { e.Step(emu.StepOver) }),
-		widget.NewButton("アウト", func() { e.Step(emu.StepOut) }),
-		widget.NewButton("スキャンライン", func() { e.Step(emu.StepScanline) }),
-		widget.NewButton("フレーム", func() { e.Step(emu.StepFrame) }),
-		widget.NewButton("カーソルまで", v.runToCursor),
-		widget.NewButton("ブレーク切替", v.toggleBreakAtCursor),
+		widget.NewButton(i18n.T(i18n.MenuRun), func() { e.Resume() }),
+		widget.NewButton(i18n.T(i18n.MenuStop), func() { e.Pause() }),
+		widget.NewButton(i18n.T(i18n.CPUStepCycle), func() { e.Step(emu.StepCycle) }),
+		widget.NewButton(i18n.T(i18n.CPUStepInstruction), func() { e.Step(emu.StepInstruction) }),
+		widget.NewButton(i18n.T(i18n.CPUStepOver), func() { e.Step(emu.StepOver) }),
+		widget.NewButton(i18n.T(i18n.CPUStepOut), func() { e.Step(emu.StepOut) }),
+		widget.NewButton(i18n.T(i18n.CPUStepScanline), func() { e.Step(emu.StepScanline) }),
+		widget.NewButton(i18n.T(i18n.CPUStepFrame), func() { e.Step(emu.StepFrame) }),
+		widget.NewButton(i18n.T(i18n.CPURunToCursor), v.runToCursor),
+		widget.NewButton(i18n.T(i18n.CPUToggleBreak), v.toggleBreakAtCursor),
 	)
 
 	v.panel = newBreakpointPanel(v.u)
 
 	side := container.NewVBox(
-		widget.NewLabelWithStyle("レジスタ", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.CPURegisters), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		regForm, v.flags, v.pos, v.irq,
-		widget.NewLabelWithStyle("スタック", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.CPUStack), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		v.stack,
-		widget.NewLabelWithStyle("コールスタック（推定）", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.CPUCallStack), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		v.calls,
 	)
 	top := container.NewBorder(nil, container.NewVBox(v.cursorLbl, buttons), nil,
@@ -202,25 +204,25 @@ func (v *cpuViewer) drawState() {
 			e.SetText(values[r])
 		}
 	}
-	v.flags.SetText("フラグ: " + vw.PFlags())
+	v.flags.SetText(i18n.T(i18n.CPUFlags) + vw.PFlags())
 
-	pos := fmt.Sprintf("サイクル: %d\nフレーム: %d  スキャンライン: %d  ドット: %d",
+	pos := i18n.T(i18n.CPUPosition,
 		vw.Cycles, vw.Frame, vw.Scanline, vw.Dot)
 	if g, ok := v.u.emu.GatePosition(); ok {
-		pos += fmt.Sprintf("\n命令の途中（サイクル %d、行 %d、ドット %d）", g.Cycles, g.Scanline, g.Dot)
+		pos += i18n.T(i18n.CPUMidInstruction, g.Cycles, g.Scanline, g.Dot)
 	}
 	v.pos.SetText(pos)
 
-	irq := "保留中の割り込み: "
+	irq := i18n.T(i18n.CPUPendingInterrupts)
 	var pending []string
 	if vw.NMIPending {
 		pending = append(pending, "NMI")
 	}
 	for _, s := range vw.IRQSources {
-		pending = append(pending, "IRQ（"+s+"）")
+		pending = append(pending, i18n.T(i18n.CPUIRQSource, s))
 	}
 	if len(pending) == 0 {
-		irq += "なし"
+		irq += i18n.T(i18n.SetNoneOption)
 	} else {
 		irq += strings.Join(pending, "、")
 	}
@@ -230,14 +232,14 @@ func (v *cpuViewer) drawState() {
 	v.calls.SetText(formatCalls(vw.Calls))
 
 	if v.hasCursor {
-		v.cursorLbl.SetText(fmt.Sprintf("カーソル: $%04X", v.cursor))
+		v.cursorLbl.SetText(i18n.T(i18n.CPUCursorAddr, v.cursor))
 	}
 }
 
 // formatStack は $01FF から S+1 までを並べる。上に近い（新しい）値を先に出す。
 func formatStack(s uint8, stack []uint8) string {
 	if len(stack) == 0 {
-		return "（空）"
+		return i18n.T(i18n.CommonEmpty)
 	}
 	var b strings.Builder
 	for i, val := range stack {
@@ -253,7 +255,7 @@ func formatStack(s uint8, stack []uint8) string {
 // formatCalls はコールスタックを新しい順に並べる。
 func formatCalls(frames []debug.CallFrame) string {
 	if len(frames) == 0 {
-		return "（なし）"
+		return i18n.T(i18n.CommonNone)
 	}
 	var b strings.Builder
 	for i := len(frames) - 1; i >= 0; i-- {
@@ -280,7 +282,7 @@ func (v *cpuViewer) selectRow(row, _ int) {
 	}
 	v.cursor = v.view.Lines[row].Addr
 	v.hasCursor = true
-	v.cursorLbl.SetText(fmt.Sprintf("カーソル: $%04X", v.cursor))
+	v.cursorLbl.SetText(i18n.T(i18n.CPUCursorAddr, v.cursor))
 	v.drawListing()
 }
 
@@ -332,7 +334,7 @@ func parseHexValue(s string) (uint16, error) {
 	t = strings.TrimPrefix(t, "$")
 	v, err := strconv.ParseUint(t, 16, 16)
 	if err != nil {
-		return 0, fmt.Errorf("16 進の値として読めない（%q）", s)
+		return 0, errors.New(i18n.T(i18n.CPUBadHex, s))
 	}
 	return uint16(v), nil
 }

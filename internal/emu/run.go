@@ -1,6 +1,8 @@
 package emu
 
 import (
+	"errors"
+	"github.com/takaakimizuno/shogun-emulator/internal/nes"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/apu"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/cart"
 	"github.com/takaakimizuno/shogun-emulator/internal/video"
@@ -206,7 +208,7 @@ func (e *Emulator) handle(c command) {
 		e.battery = v.battery
 		e.pacer = e.cfg.NewPacer(v.machine.Region)
 		e.pacer.Reset()
-		e.paused = false
+		e.paused = e.cfg.StartPaused
 		if e.audio != nil {
 			e.audio.setRegion(v.machine.Region)
 			e.audio.setSpeed(e.speed)
@@ -479,4 +481,21 @@ func (e *Emulator) screenshotPNG(want bool) []uint8 {
 		return nil
 	}
 	return png
+}
+
+// SaveScreenshot は直前に完成したフレームを PNG で path へ保存する
+// （引数 --screenshot）。オーバースキャンで隠さず、全体を保存する。
+func (e *Emulator) SaveScreenshot(path string) error {
+	var err error
+	ok := e.WithMachine(func(m *nes.NES) {
+		if m == nil || !e.hasFrame {
+			err = errors.New("emu: 保存するフレームが無い")
+			return
+		}
+		err = video.SavePNG(e.lastFrame, video.DefaultPalette(), video.Overscan{}, m.Region.PictureHeight, path)
+	})
+	if !ok {
+		return errors.New("emu: エミュレーションが停止している")
+	}
+	return err
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"strconv"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
 )
 
@@ -41,9 +43,9 @@ func (u *UI) logs() *logViewer {
 }
 
 // allCategoriesLabel はフィルタで全カテゴリを選ぶ項目。
-const allCategoriesLabel = "すべて"
+var allCategoriesLabel = i18n.T(i18n.LogAllCategories)
 
-func (v *logViewer) Title() string { return "ログ" }
+func (v *logViewer) Title() string { return i18n.T(i18n.ViewerLog) }
 
 func (v *logViewer) Content() fyne.CanvasObject {
 	// grid は最後に作る。入力欄を作る途中の OnChanged で redraw が
@@ -55,7 +57,7 @@ func (v *logViewer) Content() fyne.CanvasObject {
 		func(string) { v.redraw() })
 	v.filter.SetSelected(allCategoriesLabel)
 	v.search = widget.NewEntry()
-	v.search.SetPlaceHolder("検索")
+	v.search.SetPlaceHolder(i18n.T(i18n.CommonSearch))
 	v.search.OnChanged = func(string) { v.redraw() }
 	v.limit = widget.NewEntry()
 	v.limit.SetText(strconv.Itoa(defaultLogLines))
@@ -66,17 +68,17 @@ func (v *logViewer) Content() fyne.CanvasObject {
 	v.enabled.SetSelected(v.u.cfg.Debug.LogCategories)
 	v.enabled.OnChanged = v.setEnabled
 
-	clear := widget.NewButton("消去", func() {
+	clear := widget.NewButton(i18n.T(i18n.CommonClear), func() {
 		v.u.emu.Debugger().Logger().Clear()
 		v.redraw()
 	})
 
 	bar := container.NewBorder(nil, nil,
-		container.NewHBox(widget.NewLabel("表示"), v.filter),
-		container.NewHBox(widget.NewLabel("行数"), v.limit, clear),
+		container.NewHBox(widget.NewLabel(i18n.T(i18n.MenuView)), v.filter),
+		container.NewHBox(widget.NewLabel(i18n.T(i18n.LogLines)), v.limit, clear),
 		v.search)
 	top := container.NewVBox(
-		container.NewHScroll(container.NewHBox(widget.NewLabel("記録する"), v.enabled)),
+		container.NewHScroll(container.NewHBox(widget.NewLabel(i18n.T(i18n.LogRecord)), v.enabled)),
 		bar,
 	)
 	v.grid = widget.NewTextGrid()
@@ -91,7 +93,7 @@ func (v *logViewer) setEnabled(names []string) {
 		v.u.showError(err)
 		return
 	}
-	v.u.cfg.Debug.LogCategories = append([]string(nil), names...)
+	v.u.update(func(c *config.Config) { c.Debug.LogCategories = append([]string{}, names...) })
 	v.u.emu.WithDebugger(func(d *debug.Debugger) { d.SetLogCategories(cats) })
 }
 

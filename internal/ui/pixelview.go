@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image"
 	"image/color"
 	"strconv"
@@ -240,7 +241,7 @@ func (s *snapshotSource) latest() bool {
 // lineSelector は取得位置を選ぶ入力欄を作る。空欄でフレーム末とする。
 func (s *snapshotSource) lineSelector(onChange func()) fyne.CanvasObject {
 	e := widget.NewEntry()
-	e.SetPlaceHolder("フレーム末")
+	e.SetPlaceHolder(i18n.T(i18n.SnapFrameEnd))
 	if s.line >= 0 {
 		e.SetText(strconv.Itoa(s.line))
 	}
@@ -256,6 +257,6 @@ func (s *snapshotSource) lineSelector(onChange func()) fyne.CanvasObject {
 			onChange()
 		}
 	}
-	label := widget.NewLabel("取得する行")
+	label := widget.NewLabel(i18n.T(i18n.SnapLine))
 	return container2(label, e)
 }

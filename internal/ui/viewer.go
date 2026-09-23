@@ -40,6 +40,9 @@ type ViewerHost interface {
 
 	// Close はすべての表示をやめる。配置を切り替えるときに使う。
 	Close()
+
+	// Size はビューアの表示の大きさを返す。タブの配置では 0 を返す。
+	Size(v Viewer) fyne.Size
 }
 
 // windowHost は各ビューアを別ウィンドウに置く。
@@ -48,6 +51,11 @@ type windowHost struct {
 	// order は表示を始めた順。map をたどる順序に依存しないために持つ。
 	order   []Viewer
 	windows map[Viewer]fyne.Window
+
+	// sizeOf はビューアの保存したサイズを返す。nil のとき使わない。
+	sizeOf func(v Viewer) (fyne.Size, bool)
+	// onClosed は利用者がウィンドウを閉じたときに、閉じる前のサイズを受け取る。
+	onClosed func(v Viewer, size fyne.Size)
 }
 
 // newWindowHost は別ウィンドウの配置を作る。
@@ -63,6 +71,19 @@ func (h *windowHost) Show(v Viewer) {
 	}
 	w := h.app.NewWindow(v.Title())
 	w.SetContent(v.Content())
+	if h.sizeOf != nil {
+		if size, ok := h.sizeOf(v); ok {
+			w.Resize(size)
+		}
+	}
+	// ウィンドウを閉じる前にサイズを記録する。閉じた後はキャンバスの
+	// 大きさが取れない。
+	w.SetCloseIntercept(func() {
+		if h.onClosed != nil {
+			h.onClosed(v, w.Canvas().Size())
+		}
+		w.Close()
+	})
 	// ウィンドウを閉じたときに表示状態を合わせる。閉じた後も表示中の
 	// ままにすると、メニューの状態と実際の表示が食い違う。
 	w.SetOnClosed(func() { h.forget(v) })
@@ -76,6 +97,9 @@ func (h *windowHost) Hide(v Viewer) {
 	w, ok := h.windows[v]
 	if !ok {
 		return
+	}
+	if h.onClosed != nil {
+		h.onClosed(v, w.Canvas().Size())
 	}
 	h.forget(v)
 	w.Close()
@@ -107,6 +131,14 @@ func (h *windowHost) Visible() []Viewer {
 	return append([]Viewer(nil), h.order...)
 }
 
+// Size はビューアのウィンドウの大きさを返す。
+func (h *windowHost) Size(v Viewer) fyne.Size {
+	if w, ok := h.windows[v]; ok {
+		return w.Canvas().Size()
+	}
+	return fyne.Size{}
+}
+
 // Close はすべてのウィンドウを閉じる。
 func (h *windowHost) Close() {
 	for _, v := range h.Visible() {
@@ -119,6 +151,9 @@ type dockedHost struct {
 	tabs  *container.AppTabs
 	order []Viewer
 	items map[Viewer]*container.TabItem
+
+	// onClosed はタブを閉じたときに呼ばれる。サイズは 0 を渡す。
+	onClosed func(v Viewer, size fyne.Size)
 }
 
 // newDockedHost はタブの配置を作る。
@@ -145,6 +180,9 @@ func (h *dockedHost) Hide(v Viewer) {
 	if !ok {
 		return
 	}
+	if h.onClosed != nil {
+		h.onClosed(v, fyne.Size{})
+	}
 	delete(h.items, v)
 	for i, x := range h.order {
 		if x == v {
@@ -166,6 +204,9 @@ func (h *dockedHost) IsVisible(v Viewer) bool {
 func (h *dockedHost) Visible() []Viewer {
 	return append([]Viewer(nil), h.order...)
 }
+
+// Size はタブの配置では使わない。0 を返す。
+func (h *dockedHost) Size(Viewer) fyne.Size { return fyne.Size{} }
 
 // Close はすべてのタブを取り除く。
 func (h *dockedHost) Close() {

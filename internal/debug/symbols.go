@@ -169,6 +169,9 @@ func (s *Symbols) RemoveWatch(addr uint16) {
 func (s *Symbols) SetBreakpoints(list []Breakpoint) {
 	saved := make([]SavedBreakpoint, 0, len(list))
 	for _, b := range list {
+		if b.Temporary {
+			continue
+		}
 		saved = append(saved, saveBreakpoint(b))
 	}
 	s.mu.Lock()

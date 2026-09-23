@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -39,8 +40,8 @@ func TestMainMenuHasSpecifiedItems(t *testing.T) {
 	u.version = "test"
 
 	menu := u.buildMainMenu()
-	if len(menu.Items) != 7 {
-		t.Fatalf("メニューの数 = %d, 期待 7", len(menu.Items))
+	if len(menu.Items) != 8 {
+		t.Fatalf("メニューの数 = %d, 期待 8", len(menu.Items))
 	}
 
 	want := map[string][]string{
@@ -102,28 +103,46 @@ func TestSpeedMenuSendsSpeed(t *testing.T) {
 	waitSpeed(t, u, 2.0)
 }
 
-// TestRecentROMsKeepOrderAndLimit は最近使った ROM の並びと上限を確かめる。
+// TestRecentROMsKeepOrderAndLimit は最近使った ROM の並びと上限を確かめ、
+// 設定ファイルへ保存されることを確かめる（フェーズ 12 計画 §3.13）。
 func TestRecentROMsKeepOrderAndLimit(t *testing.T) {
 	test.NewApp()
 	u := newTestUI(t)
+	path := filepath.Join(t.TempDir(), "config.json")
+	u.store = config.NewStore(config.Paths{}, path, "", config.Default(), nil, config.DefaultKeybindings())
+	u.cfg = u.store.Config()
 
-	for i := range maxRecentROMs + 5 {
+	max := config.MaxRecentROMs
+	for i := range max + 5 {
 		u.addRecent(fmt.Sprintf("/roms/%02d.nes", i))
 	}
-	if len(u.recent) != maxRecentROMs {
-		t.Errorf("覚えている数 = %d, 期待 %d", len(u.recent), maxRecentROMs)
+	recent := u.cfg.UI.RecentROMs
+	if len(recent) != max {
+		t.Errorf("覚えている数 = %d, 期待 %d", len(recent), max)
 	}
-	if u.recent[0] != fmt.Sprintf("/roms/%02d.nes", maxRecentROMs+4) {
-		t.Errorf("先頭が最新でない: %s", u.recent[0])
+	if recent[0].Path != fmt.Sprintf("/roms/%02d.nes", max+4) || recent[0].Name != fmt.Sprintf("%02d.nes", max+4) {
+		t.Errorf("先頭が最新でない: %+v", recent[0])
 	}
 
 	// すでにあるものは先頭へ移る
-	u.addRecent(u.recent[3])
-	if len(u.recent) != maxRecentROMs {
-		t.Errorf("重複で数が増えた: %d", len(u.recent))
+	u.addRecent(recent[3].Path)
+	recent = u.cfg.UI.RecentROMs
+	if len(recent) != max {
+		t.Errorf("重複で数が増えた: %d", len(recent))
 	}
-	if u.recent[0] == u.recent[1] {
+	if recent[0] == recent[1] {
 		t.Error("同じものが 2 つ並んでいる")
+	}
+
+	saved, _, err := config.Load(path)
+	if err != nil || len(saved.UI.RecentROMs) != max || saved.UI.RecentROMs[0] != recent[0] {
+		t.Errorf("設定ファイルに保存されていない: %v %+v", err, saved.UI.RecentROMs)
+	}
+
+	// 存在しないファイルを開こうとすると一覧から除く。
+	u.OpenROM(recent[0].Path)
+	if len(u.cfg.UI.RecentROMs) != max-1 {
+		t.Errorf("存在しないファイルが一覧に残っている: %d 件", len(u.cfg.UI.RecentROMs))
 	}
 }
 

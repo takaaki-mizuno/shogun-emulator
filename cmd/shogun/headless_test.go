@@ -246,3 +246,100 @@ func TestRAMSeedAndInitAreApplied(t *testing.T) {
 		t.Errorf("シード = %d", cfg.Emulation.RAMSeed)
 	}
 }
+
+// TestHeadlessScreenshot は --headless --frames 60 --screenshot が PNG を書く
+// ことを確かめる（フェーズ 12 計画 §3.8）。
+func TestHeadlessScreenshot(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.png")
+	code, _, stderr := runCLI(t, "--headless", "--frames", "60", "--screenshot", out, writeLoopROM(t))
+	if code != 0 {
+		t.Fatalf("終了コード = %d: %s", code, stderr)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil || len(data) < 8 || string(data[1:4]) != "PNG" {
+		t.Errorf("PNG が書かれていない: %v", err)
+	}
+}
+
+// TestHeadlessTraceLog は --trace-log がトレースをファイルへ書くことを確かめる。
+func TestHeadlessTraceLog(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "trace.log")
+	code, _, stderr := runCLI(t, "--headless", "--frames", "2", "--trace-log", out, writeLoopROM(t))
+	if code != 0 {
+		t.Fatalf("終了コード = %d: %s", code, stderr)
+	}
+	data, _ := os.ReadFile(out)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 1000 || !strings.HasPrefix(lines[0], "8000") {
+		t.Errorf("トレースの行数 %d、先頭 %q", len(lines), lines[0])
+	}
+}
+
+// TestHeadlessBreakAt は --break-at で止まった理由を出して終えることを確かめる。
+func TestHeadlessBreakAt(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "--headless", "--frames", "600", "--break-at", "$8005", writeLoopROM(t))
+	if code != 0 || !strings.Contains(stdout, "停止:") || !strings.Contains(stdout, "8005") {
+		t.Errorf("終了コード %d, 出力 %q, エラー %q", code, stdout, stderr)
+	}
+}
+
+// TestHeadlessLogFile は --log file と --log-dir でログファイルへ書くことを確かめる。
+func TestHeadlessLogFile(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLI(t, "--headless", "--frames", "2", "--log", "file", "--log-dir", dir,
+		"--log-categories", "ppu.timing", writeLoopROM(t))
+	if code != 0 {
+		t.Fatalf("終了コード = %d: %s", code, stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, logFileName))
+	if err != nil || !strings.Contains(string(data), "ppu.timing") {
+		t.Errorf("ログファイルに記録が無い: %v", err)
+	}
+}
+
+// TestSampleRateWarns は 48000 以外の --sample-rate を警告して無視することを確かめる。
+func TestSampleRateWarns(t *testing.T) {
+	code, _, stderr := runCLI(t, "--headless", "--frames", "1", "--sample-rate", "44100", writeLoopROM(t))
+	if code != 0 || !strings.Contains(stderr, "44100") {
+		t.Errorf("終了コード %d, 警告 %q", code, stderr)
+	}
+}
+
+// TestSettingsPriority は引数 > 環境変数 > 設定ファイル > 既定値の優先順位と、
+// 引数の上書きを設定ファイルへ書き戻さないことを確かめる（設計書 11 編 §11.1）。
+func TestSettingsPriority(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+	base := config.Default()
+	base.Emulation.Region = config.RegionNTSC
+	base.Video.Scale = 2
+	base.Audio.BufferMilliseconds = 40
+	if err := base.Save(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"SHOGUN_REGION": "pal", "SHOGUN_SCALE": "4", config.EnvPortable: "1"}
+	getenv := func(k string) string { return env[k] }
+	opts := options{configPath: cfgPath, region: "dendy"}
+	overrides, _, err := optionOverrides(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, _, err := loadStore(opts, overrides, getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := store.Config()
+	if c.Emulation.Region != config.RegionDendy || c.Video.Scale != 4 || c.Audio.BufferMilliseconds != 40 {
+		t.Errorf("優先順位が違う: region %s, scale %d, buffer %d", c.Emulation.Region, c.Video.Scale, c.Audio.BufferMilliseconds)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	saved, _, _ := config.Load(cfgPath)
+	if saved.Emulation.Region != config.RegionNTSC || saved.Video.Scale != 2 {
+		t.Errorf("上書きが設定ファイルへ書き戻された: %s, %d", saved.Emulation.Region, saved.Video.Scale)
+	}
+	if store.KeysFile != filepath.Join(dir, config.KeybindingsFileName) {
+		t.Errorf("キーバインドファイルの場所 = %s", store.KeysFile)
+	}
+}

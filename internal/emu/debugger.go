@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/cart"
@@ -249,6 +248,29 @@ func (e *Emulator) attachDebugger(m *nes.NES) {
 	for _, w := range m.ROM.Warnings {
 		e.dbg.Logger().Warnf("ROM のヘッダ: %s", w)
 	}
+	if e.cfg.Debug.BreakOnUninitializedRAMRead {
+		e.dbg.AddBreakpoint(debug.Breakpoint{Kind: debug.BreakEvent,
+			Event: debug.EventUninitializedRAMRead, Enabled: true, Temporary: true})
+	}
+	for _, addr := range e.startupBreaks {
+		e.dbg.AddBreakpoint(debug.Breakpoint{Kind: debug.BreakExec,
+			AddrStart: addr, AddrEnd: addr, Enabled: true, Temporary: true})
+	}
+}
+
+// SetStartupBreakpoints は ROM を読み込むたびに置く実行ブレークポイントを
+// 決める（引数 --break-at）。保存しない一時的なブレークポイントとして置く。
+// ROM を読み込む前に呼ぶ。
+func (e *Emulator) SetStartupBreakpoints(addrs []uint16) {
+	e.WithMachine(func(m *nes.NES) {
+		e.startupBreaks = append([]uint16(nil), addrs...)
+		if m != nil {
+			for _, addr := range addrs {
+				e.dbg.AddBreakpoint(debug.Breakpoint{Kind: debug.BreakExec,
+					AddrStart: addr, AddrEnd: addr, Enabled: true, Temporary: true})
+			}
+		}
+	})
 }
 
 // saveSymbols は名前とブレークポイントをファイルへ書き出す。
@@ -268,11 +290,7 @@ func (e *Emulator) SaveSymbols() {
 
 // symbolsPath は ROM の名前とブレークポイントの保存先を返す。
 func (e *Emulator) symbolsPath(m *nes.NES) string {
-	dir, err := config.SymbolsDir(e.cfg.SymbolsDir)
-	if err != nil {
-		dir = config.SymbolsDirName
-	}
-	return filepath.Join(dir, cart.ROMKeyString(m.ROM.Hash[:])+".json")
+	return filepath.Join(e.cfg.Dirs.SymbolsDir(e.cfg.SymbolsDir), cart.ROMKeyString(m.ROM.Hash[:])+".json")
 }
 
 // dumpTraceOnBreak はトレースを有効にしているとき、止まった時点までの
@@ -318,20 +336,19 @@ func (e *Emulator) Poke(space debug.Space, addr int, v uint8, withSideEffects bo
 
 // newDebugger は設定からデバッガを作る。
 func newDebugger(cfg Config) *debug.Debugger {
+	// nil は設定を与えられなかったことを表し、既定のカテゴリを使う。
+	// 空のスライスはすべて無効にした指定である。
 	cats, err := debug.ParseCategories(cfg.Debug.LogCategories)
-	if err != nil || len(cfg.Debug.LogCategories) == 0 {
+	if err != nil || cfg.Debug.LogCategories == nil {
 		cats = debug.DefaultCategories
 	}
-	logger := debug.NewLogger(cats, nil)
+	logger := debug.NewLogger(cats, cfg.LogWriter)
 	return debug.New(logger, cfg.Debug.TraceRingSize, uint32(cfg.Debug.ChangeDecayFrames))
 }
 
 // traceDumpPath はトレースの書き出し先を決める。
 func (e *Emulator) traceDumpPath() (string, error) {
-	dir, err := config.TraceDir(e.cfg.TraceDir)
-	if err != nil {
-		return "", err
-	}
+	dir := e.cfg.Dirs.TraceDir(e.cfg.TraceDir)
 	name := e.Status().ROMName
 	if name == "" {
 		name = "trace"
@@ -397,26 +414,45 @@ func (e *Emulator) DumpTraceDefault() (string, error) {
 // 出力にはトレースの記録が要るため、呼び出し側はデバッガの Tracing を
 // 有効にする。
 func (e *Emulator) StartTraceFile() (string, error) {
-	var (
-		path string
-		err  error
-	)
+	return e.startTraceFile("")
+}
+
+// StartTraceLog はトレースを path へ常時出力し始める（引数 --trace-log）。
+// トレースの記録も有効にする。
+func (e *Emulator) StartTraceLog(path string) error {
+	_, err := e.startTraceFile(path)
+	return err
+}
+
+// startTraceFile はトレースの常時出力を始める。path が空のとき既定の置き場所を使う。
+func (e *Emulator) startTraceFile(path string) (string, error) {
+	var err error
 	ok := e.WithMachine(func(m *nes.NES) {
 		if m == nil {
 			err = errNoROM
 			return
 		}
 		e.closeTraceFile()
-		if path, err = e.traceDumpPath(); err != nil {
+		if path == "" {
+			if path, err = e.traceDumpPath(); err != nil {
+				return
+			}
+			path = strings.TrimSuffix(path, ".log") + "-live.log"
+		}
+		if err = os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return
 		}
-		path = strings.TrimSuffix(path, ".log") + "-live.log"
 		var f *os.File
 		if f, err = os.Create(path); err != nil {
 			return
 		}
 		e.traceFile = f
 		err = e.dbg.Tracer().SetOutput(f)
+		if err == nil {
+			f := e.dbg.Features()
+			f.Tracing = true
+			e.dbg.SetFeatures(f)
+		}
 	})
 	if !ok {
 		return "", errors.New("emu: エミュレーションが停止している")

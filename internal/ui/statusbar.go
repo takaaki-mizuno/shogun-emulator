@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"strings"
 	"time"
 
@@ -94,9 +95,9 @@ func (b *statusBar) measure() {
 func (b *statusBar) text(s emu.Status) string {
 	if !s.Loaded {
 		if b.message != "" && time.Since(b.messageAt) <= messageDuration {
-			return "ROM を読み込んでいません │ " + b.message
+			return i18n.T(i18n.StatusNoROMWithMessage, b.message)
 		}
-		return "ROM を読み込んでいません"
+		return i18n.T(i18n.StatusNoROM)
 	}
 
 	var sb strings.Builder
@@ -104,19 +105,19 @@ func (b *statusBar) text(s emu.Status) string {
 	fmt.Fprintf(&sb, " │ %s", speedText(s.Speed))
 	fmt.Fprintf(&sb, " │ %s", runStateText(s))
 	fmt.Fprintf(&sb, " │ %s", s.ROMName)
-	fmt.Fprintf(&sb, " │ %s（マッパー %d）", s.MapperName, s.MapperNumber)
-	fmt.Fprintf(&sb, " │ スロット %d", s.Slot)
+	fmt.Fprintf(&sb, i18n.T(i18n.StatusMapper), s.MapperName, s.MapperNumber)
+	fmt.Fprintf(&sb, i18n.T(i18n.StatusSlot), s.Slot)
 	if t := movieText(s); t != "" {
 		sb.WriteString(" │ ")
 		sb.WriteString(t)
 	}
 	if s.Rewinding {
-		sb.WriteString(" │ 巻き戻し中")
+		sb.WriteString(i18n.T(i18n.StatusRewinding))
 	}
 	fmt.Fprintf(&sb, " │ %s", s.RegionName)
 	fmt.Fprintf(&sb, " │ %s", audioText(s))
 	if b.dropped > 0 {
-		fmt.Fprintf(&sb, " │ 表示落ち %d", b.dropped)
+		fmt.Fprintf(&sb, i18n.T(i18n.StatusDropped), b.dropped)
 	}
 	if b.message != "" {
 		if time.Since(b.messageAt) > messageDuration {
@@ -135,13 +136,13 @@ func (b *statusBar) text(s emu.Status) string {
 func audioText(s emu.Status) string {
 	switch {
 	case !s.AudioEnabled:
-		return "音声なし"
+		return i18n.T(i18n.StatusAudioNone)
 	case s.Muted:
-		return "消音"
+		return i18n.T(i18n.KeyMute)
 	case s.AudioUnderruns > 0:
-		return fmt.Sprintf("音切れ %d", s.AudioUnderruns)
+		return i18n.T(i18n.StatusUnderruns, s.AudioUnderruns)
 	}
-	return "音声あり"
+	return i18n.T(i18n.StatusAudioOn)
 }
 
 // speedText は速度倍率の表示を返す。
@@ -151,11 +152,11 @@ func audioText(s emu.Status) string {
 func speedText(speed float64) string {
 	switch {
 	case speed >= emu.UncappedSpeed:
-		return "最速"
+		return i18n.T(i18n.StatusUncapped)
 	case speed == 1:
-		return "等速"
+		return i18n.T(i18n.StatusNormalSpeed)
 	}
-	return fmt.Sprintf("%g 倍速", speed)
+	return i18n.T(i18n.StatusSpeedN, speed)
 }
 
 // runStateText は実行状態の表示を返す。
@@ -165,14 +166,14 @@ func speedText(speed float64) string {
 // ため（設計書 08 編 §8.3.2）、利用者に見えるようにする。
 func runStateText(s emu.Status) string {
 	if !s.Paused {
-		return "実行中"
+		return i18n.T(i18n.StatusRunning)
 	}
-	t := "一時停止"
+	t := i18n.T(i18n.MenuPause)
 	if s.Break != "" {
-		t = "停止: " + s.Break
+		t = i18n.T(i18n.StatusBreakPrefix) + s.Break
 	}
 	if s.MidInstruction {
-		t += "（命令の途中）"
+		t += i18n.T(i18n.StatusMidInstruction)
 	}
 	return t
 }
@@ -181,9 +182,9 @@ func runStateText(s emu.Status) string {
 func movieText(s emu.Status) string {
 	switch {
 	case s.Movie.Recording:
-		return fmt.Sprintf("録画中 %d フレーム", s.Movie.Frame)
+		return i18n.T(i18n.StatusRecording, s.Movie.Frame)
 	case s.Movie.Playing:
-		return fmt.Sprintf("再生中 %d/%d", s.Movie.Frame, s.Movie.Total)
+		return i18n.T(i18n.StatusPlaying, s.Movie.Frame, s.Movie.Total)
 	}
 	return ""
 }

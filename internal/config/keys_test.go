@@ -1,7 +1,9 @@
 package config
 
 import (
+	"os"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -188,5 +190,51 @@ func TestDefaultConfigValues(t *testing.T) {
 		if tt.got != tt.want {
 			t.Errorf("%s = %v, 期待 %v", tt.name, tt.got, tt.want)
 		}
+	}
+}
+
+// TestKeybindingsRoundTripAndSanitize はキーバインドの保存と読み込みの往復と、
+// 知らない名前・キーコードの扱いを確かめる（設計書 11 編 §11.4）。
+func TestKeybindingsRoundTripAndSanitize(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/keybindings.json"
+	k := DefaultKeybindings()
+	k.Player(1).Turbo[ButtonA] = 15
+	k.Hotkeys["mute"] = []Binding{Key("KeyM")}
+	if err := k.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	known := func(code string) bool { return code != "Bogus" }
+	got, w, err := LoadKeybindings(path, known)
+	if err != nil || len(w) != 0 {
+		t.Fatalf("読み込み: %v %v", err, w)
+	}
+	if got.Player(1).Turbo[ButtonA] != 15 || got.Hotkeys["mute"][0].Code != "KeyM" {
+		t.Errorf("往復で変わった: %+v", got)
+	}
+
+	bad := `{"version":1,"players":[{"player":1,"device":"standard",
+		"bindings":{"a":[{"type":"key","code":"Bogus"},{"type":"key","code":"KeyQ"}],"jump":[{"type":"key","code":"KeyJ"}]},
+		"turbo":{"a":99,"b":10}}],
+		"hotkeys":{"pause":[{"type":"key","code":"Space"}],"fly":[{"type":"key","code":"KeyY"}]}}`
+	os.WriteFile(path, []byte(bad), 0o644)
+	got, w, err = LoadKeybindings(path, known)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(w, "\n")
+	for _, want := range []string{"Bogus", "jump", "fly", "99"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("警告に %q が無い: %s", want, text)
+		}
+	}
+	p1 := got.Player(1)
+	if len(p1.Bindings[ButtonA]) != 1 || p1.Turbo[ButtonA] != 0 || p1.Turbo[ButtonB] != 10 || len(got.Players) != 2 {
+		t.Errorf("読み込んだ割り当て = %+v", got.Players)
+	}
+
+	os.WriteFile(path, []byte("{"), 0o644)
+	if got, w, _ := LoadKeybindings(path, known); len(w) != 1 || len(got.Hotkeys) == 0 {
+		t.Error("壊れたファイルで既定値にならない")
 	}
 }

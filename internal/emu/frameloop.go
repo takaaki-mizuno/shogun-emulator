@@ -25,7 +25,7 @@ func (e *Emulator) beginFrame() {
 			return
 		}
 	} else {
-		e.latch.set(e.currentButtons())
+		e.latch.set(e.turbo.apply(frame, e.currentButtons()))
 	}
 
 	if e.recorder != nil {

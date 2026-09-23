@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"image"
 	"image/color"
 	"strings"
@@ -54,7 +56,7 @@ func (u *UI) sprites() *spriteViewer {
 	return u.spriteViewer
 }
 
-func (v *spriteViewer) Title() string { return "スプライト" }
+func (v *spriteViewer) Title() string { return i18n.T(i18n.ViewerSprite) }
 
 func (v *spriteViewer) Content() fyne.CanvasObject {
 	v.src.acquire()
@@ -68,7 +70,7 @@ func (v *spriteViewer) Content() fyne.CanvasObject {
 	v.table = widget.NewTextGrid()
 	v.detail = widget.NewLabel("")
 
-	names := []string{"Y", "タイル", "属性", "X"}
+	names := []string{"Y", i18n.T(i18n.SprTile), i18n.T(i18n.SprAttr), "X"}
 	form := container.NewGridWithColumns(8)
 	for i := range v.fields {
 		e := widget.NewEntry()
@@ -78,18 +80,18 @@ func (v *spriteViewer) Content() fyne.CanvasObject {
 		form.Add(widget.NewLabel(names[i]))
 		form.Add(e)
 	}
-	boxes := widget.NewCheck("メイン画面に矩形を重ねる", func(on bool) {
+	boxes := widget.NewCheck(i18n.T(i18n.SprBoxes), func(on bool) {
 		v.boxes = on
 		v.updateBoxes()
 	})
 	boxes.SetChecked(v.boxes)
 
 	left := container.NewVBox(
-		widget.NewLabelWithStyle("64 スプライト（赤枠がスプライト 0、暗いものは描かれない）", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.SprSheetTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewCenter(v.sheet), v.detail, form,
 	)
 	right := container.NewVBox(
-		widget.NewLabelWithStyle("画面上の配置（ドラッグで移動）", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T(i18n.SprPreviewTitle), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewHBox(v.preview, v.lines),
 	)
 	bar := container.NewHBox(boxes, v.src.lineSelector(v.Refresh))
@@ -244,12 +246,12 @@ func drawClippedRect(img *image.RGBA, r image.Rectangle, c color.RGBA) {
 func (v *spriteViewer) drawTable() {
 	snap := &v.src.snap
 	rows := make([]widget.TextGridRow, 0, 66)
-	rows = append(rows, textRow(" #   Y    タイル 属性 パレット 優先 反転  X    描画", cellStyle(dimColor(), nil)))
+	rows = append(rows, textRow(i18n.T(i18n.SprTableHeader), cellStyle(dimColor(), nil)))
 	for i := range 64 {
 		s := spriteAt(snap, i)
-		pri := "前"
+		pri := i18n.T(i18n.SprFront)
 		if s.behind() {
-			pri = "後"
+			pri = i18n.T(i18n.SprBack)
 		}
 		flip := []byte("--")
 		if s.flipH() {
@@ -282,9 +284,9 @@ func (v *spriteViewer) drawTable() {
 			over = append(over, fmt.Sprintf("%d(%d)", y, n))
 		}
 	}
-	summary := "9 個以上の行: なし"
+	summary := i18n.T(i18n.SprOverflowNone)
 	if len(over) > 0 {
-		summary = "9 個以上の行: " + strings.Join(over, " ")
+		summary = i18n.T(i18n.SprOverflowPrefix) + strings.Join(over, " ")
 	}
 	rows = append(rows, textRow(summary, cellStyle(colorLineOver, nil)))
 	setRows(v.table, rows)
@@ -301,8 +303,8 @@ func (v *spriteViewer) drawDetail() {
 		}
 		e.SetText(fmt.Sprintf("$%02X", vals[i]))
 	}
-	v.detail.SetText(fmt.Sprintf("スプライト %d: パレット %d、%s、水平反転 %v、垂直反転 %v",
-		v.selected, s.palette(), map[bool]string{false: "背景の前", true: "背景の後ろ"}[s.behind()], s.flipH(), s.flipV()))
+	v.detail.SetText(i18n.T(i18n.SprDetail,
+		v.selected, s.palette(), map[bool]string{false: i18n.T(i18n.SprInFront), true: i18n.T(i18n.SprBehind)}[s.behind()], s.flipH(), s.flipV()))
 }
 
 // selectSprite はスプライトを選ぶ。
@@ -362,7 +364,7 @@ func (v *spriteViewer) drag(_, _ int, dx, dy float32) {
 func (v *spriteViewer) setField(k int, s string) {
 	val, err := parseHexValue(s)
 	if err != nil || val > 0xFF {
-		v.u.showError(fmt.Errorf("$00-$FF の値を入力する（%q）", s))
+		v.u.showError(errors.New(i18n.T(i18n.SprBadValue, s)))
 		return
 	}
 	if v.poke(v.selected*4+k, uint8(val)) && v.src.ok {

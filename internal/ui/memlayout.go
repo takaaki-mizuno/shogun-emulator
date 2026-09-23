@@ -3,7 +3,9 @@ package ui
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"strings"
 )
 
@@ -118,17 +120,17 @@ func separatorBefore(zeroPageSpace bool, offset int) bool {
 func parseSearch(s string, asText bool) ([]uint8, error) {
 	if asText {
 		if s == "" {
-			return nil, fmt.Errorf("検索する文字列が空である")
+			return nil, errors.New(i18n.T(i18n.MemSearchEmpty))
 		}
 		return []uint8(s), nil
 	}
 	t := strings.NewReplacer(" ", "", "$", "", ",", "").Replace(s)
 	if t == "" || len(t)%2 != 0 {
-		return nil, fmt.Errorf("16 進のバイト列として読めない（%q）", s)
+		return nil, errors.New(i18n.T(i18n.MemSearchBadHex, s))
 	}
 	b, err := hex.DecodeString(t)
 	if err != nil {
-		return nil, fmt.Errorf("16 進のバイト列として読めない（%q）", s)
+		return nil, errors.New(i18n.T(i18n.MemSearchBadHex, s))
 	}
 	return b, nil
 }

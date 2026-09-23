@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/takaakimizuno/shogun-emulator/internal/config"
 )
 
 // TestParseCategories は名前の並びを集合にできることを確かめる。
@@ -135,5 +138,46 @@ func BenchmarkEnabledCategoryLog(b *testing.B) {
 		if l.Categories&CatPPURegister != 0 {
 			l.Log(CatPPURegister, "$2000 へ %02X を書いた", i&0xFF)
 		}
+	}
+}
+
+// TestCategoryNamesMatchConfig は設定の検証に使うカテゴリ名が、このパッケージの
+// カテゴリ名と一致することを確かめる。config は debug を参照できないため
+// 名前を別に持っている。
+func TestCategoryNamesMatchConfig(t *testing.T) {
+	if got, want := config.LogCategoryNames(), CategoryNames(); !slices.Equal(got, want) {
+		t.Errorf("config のカテゴリ名 = %v, debug = %v", got, want)
+	}
+}
+
+// TestLoggerSuppressesRepeatedWarnings は同じ warn.compat を 3 回まで記録し、
+// 4 回目に打ち切りを知らせて以降を記録しないことを確かめる（設計書 09 編 §9.8）。
+func TestLoggerSuppressesRepeatedWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	l := NewLogger(CatWarnCompat|CatMapper, &buf)
+	for range 10 {
+		l.Warnf("色 $0D を書いた")
+		l.Log(CatMapper, "バンク切り替え")
+	}
+	l.Warnf("別の警告")
+	var warns, mapper int
+	for _, e := range l.Entries(0, "", 0) {
+		switch e.Category {
+		case CatWarnCompat:
+			warns++
+		case CatMapper:
+			mapper++
+		}
+	}
+	if warns != 5 || mapper != 10 {
+		t.Errorf("記録した数 = warn.compat %d, mapper %d, 期待 5, 10", warns, mapper)
+	}
+	if !strings.Contains(buf.String(), "以降は記録しない") {
+		t.Error("打ち切りを知らせていない")
+	}
+	l.ResetRepeats()
+	l.Warnf("色 $0D を書いた")
+	if got := len(l.Entries(CatWarnCompat, "色 $0D を書いた", 0)); got != 5 {
+		t.Errorf("数え直した後の記録 = %d, 期待 5", got)
 	}
 }

@@ -1,7 +1,7 @@
 package config
 
-// Version は設定ファイルの形式のバージョン。
-const Version = 1
+// Version は設定ファイルの形式のバージョン。移行は migrate.go に置く。
+const Version = 2
 
 // Config はアプリケーション全体の設定。
 //
@@ -18,6 +18,9 @@ type Config struct {
 	State     StateConfig     `json:"state"`
 	Movie     MovieConfig     `json:"movie"`
 	UI        UIConfig        `json:"ui"`
+
+	// noSave は新しいバージョンの設定ファイルを読んだため保存しないことを表す。
+	noSave bool
 }
 
 // EmulationConfig はエミュレーションの挙動の設定。
@@ -81,11 +84,18 @@ type PathsConfig struct {
 
 // DebugConfig はデバッグ出力の設定。
 type DebugConfig struct {
-	LogCategories     []string `json:"logCategories"`
-	LogToFile         bool     `json:"logToFile"`
-	TraceRingSize     int      `json:"traceRingSize"`
-	ChangeDecayFrames int      `json:"changeDecayFrames"`
-	MemoryEditWrite   bool     `json:"memoryEditWrite"`
+	LogCategories []string `json:"logCategories"`
+	// LogOutput はログの出力先。none・stderr・stdout・file。
+	LogOutput string `json:"logOutput"`
+	// LogMaxBytes と LogGenerations はファイル出力のローテーションの設定。
+	LogMaxBytes       int64 `json:"logMaxBytes"`
+	LogGenerations    int   `json:"logGenerations"`
+	TraceRingSize     int   `json:"traceRingSize"`
+	ChangeDecayFrames int   `json:"changeDecayFrames"`
+	MemoryEditWrite   bool  `json:"memoryEditWrite"`
+	// BreakOnUninitializedRAMRead は ROM を読み込むたびに未初期化 RAM の
+	// 読み出しのイベントブレークポイントを置く。
+	BreakOnUninitializedRAMRead bool `json:"breakOnUninitializedRamRead"`
 }
 
 // StateConfig はセーブステートと巻き戻しの設定。
@@ -109,7 +119,41 @@ type UIConfig struct {
 	ViewerLayout string `json:"viewerLayout"`
 	Language     string `json:"language"`
 	Theme        string `json:"theme"`
+	// Windows はウィンドウの名前ごとのサイズと表示状態（設計書 10 編 §10.7）。
+	Windows map[string]WindowState `json:"windows"`
+	// RecentROMs は最近使った ROM。新しい順。
+	RecentROMs []RecentROM `json:"recentRoms"`
 }
+
+// WindowState はウィンドウのサイズと表示状態。
+//
+// 位置は持たない。Fyne はウィンドウの位置を取得・設定する手段を持たない。
+type WindowState struct {
+	Width   int  `json:"width"`
+	Height  int  `json:"height"`
+	Visible bool `json:"visible"`
+}
+
+// RecentROM は最近使った ROM の 1 件。
+type RecentROM struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+// ChannelNames は audio.channelVolumes のキー。APU のチャンネルの順。
+var ChannelNames = []string{"pulse1", "pulse2", "triangle", "noise", "dmc"}
+
+// defaultChannelVolumes は全チャンネルを等倍にした音量を返す。
+func defaultChannelVolumes() map[string]float64 {
+	m := map[string]float64{}
+	for _, n := range ChannelNames {
+		m[n] = 1.0
+	}
+	return m
+}
+
+// MaxRecentROMs は最近使った ROM を残す件数。
+const MaxRecentROMs = 10
 
 // 設定値として受け付ける文字列。
 const (
@@ -126,6 +170,17 @@ const (
 
 	LayoutWindows = "windows"
 	LayoutDocked  = "docked"
+
+	LogNone   = "none"
+	LogStderr = "stderr"
+	LogStdout = "stdout"
+	LogFile   = "file"
+
+	ThemeAuto  = "auto"
+	ThemeLight = "light"
+	ThemeDark  = "dark"
+
+	LanguageJapanese = "ja"
 )
 
 // 拡大率の範囲。
@@ -167,6 +222,7 @@ func Default() *Config {
 			BufferMilliseconds:      25,
 			RingHighWaterMultiplier: 2,
 			MasterVolume:            1.0,
+			ChannelVolumes:          defaultChannelVolumes(),
 			FilterProfile:           "nes",
 		},
 		Input: InputConfig{
@@ -176,6 +232,9 @@ func Default() *Config {
 		},
 		Debug: DebugConfig{
 			LogCategories:     []string{"warn.compat", "error"},
+			LogOutput:         LogStderr,
+			LogMaxBytes:       10 << 20,
+			LogGenerations:    3,
 			TraceRingSize:     1000000,
 			ChangeDecayFrames: 30,
 		},
@@ -193,8 +252,10 @@ func Default() *Config {
 		},
 		UI: UIConfig{
 			ViewerLayout: LayoutWindows,
-			Language:     "ja",
-			Theme:        "auto",
+			Language:     LanguageJapanese,
+			Theme:        ThemeAuto,
+			Windows:      map[string]WindowState{},
+			RecentROMs:   []RecentROM{},
 		},
 	}
 }
