@@ -204,3 +204,32 @@ func TestPaletteFileAppliedImmediately(t *testing.T) {
 		t.Error("読めないパレットで組み込みのパレットに戻っていない")
 	}
 }
+
+// TestViewerWindowsShareMainMenu は macOS でビューアと設定画面のウィンドウにも
+// メインウィンドウと同じメニューを設定し、他の OS では設定しないことを
+// 確かめる（設計書 10 編 §10.5）。
+func TestViewerWindowsShareMainMenu(t *testing.T) {
+	saved := menuOnEveryWindow
+	t.Cleanup(func() { menuOnEveryWindow = saved })
+
+	for _, share := range []bool{true, false} {
+		menuOnEveryWindow = share
+		u := newSettingsTestUI(t)
+		u.status = newStatusBar(u.emu.Frames)
+		u.win.SetContent(u.buildContent())
+		u.win.SetMainMenu(u.buildMainMenu())
+
+		v := u.palettes()
+		u.host.Show(v)
+		w := u.host.(*windowHost).windows[v]
+		if got := w.MainMenu() == u.win.MainMenu(); got != share {
+			t.Errorf("共有 %v: パレットのウィンドウのメニューがメインと同じ = %v", share, got)
+		}
+		u.openSettings(settingsTabEmulation)
+		if got := u.settingsWin.MainMenu() == u.win.MainMenu(); got != share {
+			t.Errorf("共有 %v: 設定画面のメニューがメインと同じ = %v", share, got)
+		}
+		u.settingsWin.Close()
+		u.host.Hide(v)
+	}
+}

@@ -4,6 +4,7 @@ package ui
 import (
 	"fmt"
 	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,6 +210,22 @@ func (u *UI) Run() {
 	u.win.ShowAndRun()
 }
 
+// menuOnEveryWindow はメインウィンドウ以外にもメニューを設定するかを表す。
+//
+// macOS のメニューバーはアクティブなウィンドウのメニューに切り替わる。
+// ビューアに設定しないと、ビューアをアクティブにしたときにメニューが
+// 「Window」だけになる。Windows と Linux ではメニューがウィンドウの中に
+// 描かれるため、メインウィンドウにだけ置く（設計書 10 編 §10.5）。
+var menuOnEveryWindow = runtime.GOOS == "darwin"
+
+// shareMainMenu はメインウィンドウのメニューを w にも設定する。
+func (u *UI) shareMainMenu(w fyne.Window) {
+	if !menuOnEveryWindow || u.win == nil || u.win.MainMenu() == nil {
+		return
+	}
+	w.SetMainMenu(u.win.MainMenu())
+}
+
 // viewerClosed はビューアを閉じたときにサイズと表示状態を記録する。
 //
 // 配置を切り替えるときも一度閉じるため、表示状態は閉じたものになる。
@@ -279,6 +296,7 @@ func (u *UI) buildContent() fyne.CanvasObject {
 		return fyne.Size{}, false
 	}
 	wh.onClosed = u.viewerClosed
+	wh.prepare = u.shareMainMenu
 	u.host = wh
 	return container.NewBorder(nil, u.status.CanvasObject(), nil, nil, center)
 }

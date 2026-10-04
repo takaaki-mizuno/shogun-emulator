@@ -56,6 +56,8 @@ type windowHost struct {
 	sizeOf func(v Viewer) (fyne.Size, bool)
 	// onClosed は利用者がウィンドウを閉じたときに、閉じる前のサイズを受け取る。
 	onClosed func(v Viewer, size fyne.Size)
+	// prepare は開く直前のウィンドウを受け取る。メニューの設定に使う。
+	prepare func(w fyne.Window)
 }
 
 // newWindowHost は別ウィンドウの配置を作る。
@@ -70,6 +72,9 @@ func (h *windowHost) Show(v Viewer) {
 		return
 	}
 	w := h.app.NewWindow(v.Title())
+	if h.prepare != nil {
+		h.prepare(w)
+	}
 	w.SetContent(v.Content())
 	if h.sizeOf != nil {
 		if size, ok := h.sizeOf(v); ok {

@@ -61,6 +61,7 @@ func (u *UI) openSettings(tab int) {
 	}
 	f := u.newSettingsForm()
 	f.win = u.app.NewWindow(i18n.T(i18n.MenuSettings))
+	u.shareMainMenu(f.win)
 	f.win.SetContent(f.content())
 	f.tabs.SelectIndex(tab)
 	f.win.Resize(fyne.NewSize(720, 640))
