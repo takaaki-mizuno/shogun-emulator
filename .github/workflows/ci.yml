@@ -3,9 +3,10 @@ name: CI
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  # タグのリリース（release.yml）から、成果物を作る前のテストとして呼ばれる
+  workflow_call:
 
 permissions:
   contents: read
@@ -88,6 +89,45 @@ jobs:
       - name: go test -race
         shell: bash
         run: go test -race -short $(go list ./... | grep -v internal/testrom)
+
+      # 決定論ハッシュ（設計書 12 編 §12.8.4）を書き出し、determinism ジョブで
+      # 3 OS の値を比べる
+      - name: 決定論ハッシュを書き出す
+        shell: bash
+        run: |
+          go test -count=1 -run '^TestDeterminismHashes$' ./internal/testrom -v \
+            | grep '^determinism ' | sort > determinism-${{ runner.os }}.txt
+          cat determinism-${{ runner.os }}.txt
+          test -s determinism-${{ runner.os }}.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: determinism-${{ runner.os }}
+          path: determinism-${{ runner.os }}.txt
+          if-no-files-found: error
+
+  determinism:
+    name: 決定論（3 OS の比較）
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: determinism-*
+          merge-multiple: true
+
+      - name: ハッシュを比べる
+        shell: bash
+        run: |
+          base=determinism-Linux.txt
+          status=0
+          for f in determinism-macOS.txt determinism-Windows.txt; do
+            if ! diff -u "$base" "$f"; then
+              echo "::error::${f%.txt} のハッシュが Linux と違う"
+              status=1
+            fi
+          done
+          exit $status
 
   build:
     name: ビルド (${{ matrix.os }})

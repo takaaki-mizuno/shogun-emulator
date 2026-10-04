@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Shogun Emulator
+Name[ja]=将軍エミュレータ
+Comment=NES emulator
+Comment[ja]=NES エミュレータ
+Exec=shogun %f
+Icon=shogun-emulator
+Categories=Game;Emulator;
+MimeType=application/x-nes-rom;
+Terminal=false

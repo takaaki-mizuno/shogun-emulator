@@ -1,0 +1,193 @@
+name: Release
+
+# v で始まるタグを打つと、3 OS の成果物を作って GitHub Releases の下書きへ
+# 添付する（設計書 13 編 §13.8）。- を含むタグ（v1.0.0-rc.1 など）は
+# プレリリースとする。
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  macos:
+    name: macOS（.app と .dmg）
+    needs: test
+    runs-on: macos-latest
+    env:
+      SHOGUN_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: arm64 と amd64 をビルドする
+        shell: bash
+        run: |
+          GOARCH=arm64 tools/build.sh
+          CGO_ENABLED=1 GOARCH=amd64 tools/build.sh
+      - name: ユニバーサルバイナリ・.app・.dmg を作る
+        run: >
+          go run ./tools/package macos -version "$SHOGUN_VERSION"
+          -arm64 dist/darwin_arm64/shogun -amd64 dist/darwin_amd64/shogun -out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows ${{ matrix.arch }}（.zip）
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    env:
+      SHOGUN_VERSION: ${{ github.ref_name }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      # Fyne は cgo を使う。arm64 のランナーには C コンパイラを入れる
+      - uses: msys2/setup-msys2@v2
+        if: matrix.arch == 'arm64'
+        with:
+          msystem: CLANGARM64
+          install: mingw-w64-clang-aarch64-clang
+          path-type: inherit
+      - name: ビルドする（リソースの生成を含む）
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            export PATH="/c/msys64/clangarm64/bin:$PATH" CC=clang
+          fi
+          GOARCH=${{ matrix.arch }} tools/build.sh
+      - name: .zip を作る
+        run: >
+          go run ./tools/package windows -version "$SHOGUN_VERSION" -arch ${{ matrix.arch }}
+          -bin dist/windows_${{ matrix.arch }}/shogun.exe -out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux ${{ matrix.arch }}（.tar.gz と AppImage）
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            appimage: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            appimage: aarch64
+    env:
+      SHOGUN_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: 依存パッケージを導入する
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxxf86vm-dev xorg-dev libasound2-dev file
+      - name: appimagetool を取得する
+        run: |
+          curl -fsSL -o appimagetool \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage }}.AppImage"
+          chmod +x appimagetool
+          echo "APPIMAGETOOL=$PWD/appimagetool" >> "$GITHUB_ENV"
+      - name: ビルドする
+        run: GOARCH=${{ matrix.arch }} tools/build.sh
+      - name: .tar.gz と AppImage を作る
+        # ランナーに FUSE が無いため、appimagetool を展開して実行する
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: >
+          go run ./tools/package linux -version "$SHOGUN_VERSION" -arch ${{ matrix.arch }}
+          -bin dist/linux_${{ matrix.arch }}/shogun -out dist -appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: リリースの下書き
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: assets
+          merge-multiple: true
+      - name: チェックサムとリリースノートを作る
+        working-directory: assets
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat > ../notes.md <<NOTES
+          ## 将軍エミュレータ ${TAG}
+
+          ### 変更点
+
+          - （ここに変更点を書く）
+
+          ### ダウンロード
+
+          | OS | ファイル |
+          |---|---|
+          | macOS 11 以降（Apple シリコン・Intel） | \`Shogun_Emulator-${TAG}-macos.dmg\` |
+          | Windows 10 以降（x64 / Arm64） | \`shogun-emulator-${TAG}-windows-amd64.zip\` / \`-arm64.zip\` |
+          | Linux（x86-64 / arm64） | \`Shogun_Emulator-${TAG}-x86_64.AppImage\` / \`-aarch64.AppImage\`、または \`.tar.gz\` |
+
+          署名と公証をしていないため、初回の起動で macOS の Gatekeeper と Windows の SmartScreen の警告が出ます。回避の手順は同梱の \`USAGE.md\` にあります。
+
+          各ファイルの SHA-256 は \`SHA256SUMS.txt\` にあります。
+          NOTES
+      - name: 下書きを作る
+        run: |
+          flags="--draft"
+          case "$TAG" in *-*) flags="$flags --prerelease" ;; esac
+          gh release create "$TAG" $flags --repo "$GITHUB_REPOSITORY" \
+            --title "将軍エミュレータ $TAG" --notes-file notes.md assets/*

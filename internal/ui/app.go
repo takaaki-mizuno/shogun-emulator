@@ -358,6 +358,7 @@ func (u *UI) stopRefreshing() {
 
 // refresh は画面とステータスバーを更新する。UI スレッドで実行される。
 func (u *UI) refresh() {
+	u.openQueuedFiles()
 	u.screen.refresh()
 	u.drainNotices()
 	u.checkDesync()

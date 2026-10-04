@@ -26,9 +26,12 @@ goarch=$(go env GOARCH)
 
 # --- バージョン情報 ---------------------------------------------------------
 
+# 版とコミットの両方を環境変数で渡したときは git を呼ばない。
 have_git=0
-if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
-	have_git=1
+if [ -z "${SHOGUN_VERSION:-}" ] || [ -z "${SHOGUN_COMMIT:-}" ]; then
+	if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+		have_git=1
+	fi
 fi
 
 version="${SHOGUN_VERSION:-}"
@@ -77,6 +80,15 @@ esac
 # コマンドラインから起動したときは実行時にコンソールへ接続する。
 if [ "$goos" = "windows" ]; then
 	ldflags="$ldflags -H windowsgui"
+fi
+
+# Windows の実行ファイルへアイコンとバージョン情報を埋め込む（設計書 13 編 §13.4）。
+# 版は "1.2.3.0" の形で渡す。タグが v1.2.3 の形でないときは 0.0.0.0 とする。
+if [ "$goos" = "windows" ]; then
+	win_version=$(printf '%s' "${version:-}" | sed -n 's/^v\{0,1\}\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1.\2.\3.0/p')
+	[ -z "$win_version" ] && win_version="0.0.0.0"
+	echo "リソース: ${win_version}"
+	SHOGUN_WIN_VERSION="$win_version" go generate ./cmd/shogun
 fi
 
 # --- 出力先 ----------------------------------------------------------------

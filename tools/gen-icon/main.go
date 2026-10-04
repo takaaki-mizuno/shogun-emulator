@@ -6,13 +6,17 @@
 //
 // 使い方:
 //
-//	go run ./tools/gen-icon
+//	go run ./tools/gen-icon           原本（SVG と 1024 px の PNG）から作り直す
+//	go run ./tools/gen-icon -derive   1024 px の PNG から各 OS 向けの形式だけを作る
+//
+// 各 OS 向けの形式は assets/icon/generated/ に書く（設計書 13 編 §13.4）。
 //
 // SIL Open Font License のフォントを使う。輪郭はアイコンの図形として
 // 埋め込まれ、フォントそのものは配布物に含まれない。
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -72,9 +76,18 @@ func main() {
 }
 
 func run() error {
+	deriveOnly := flag.Bool("derive", false, "1024 px の PNG から各 OS 向けの形式だけを作る")
+	flag.Parse()
 	root, err := moduleRoot()
 	if err != nil {
 		return err
+	}
+	if *deriveOnly {
+		src, err := readPNG(filepath.Join(root, png1024))
+		if err != nil {
+			return err
+		}
+		return derive(src, root)
 	}
 	fontPath, err := findFont()
 	if err != nil {
@@ -93,7 +106,7 @@ func run() error {
 	if err := writePNG(filepath.Join(root, png1024), img); err != nil {
 		return err
 	}
-	if err := writePNG(filepath.Join(root, png256), downscale(img, 256)); err != nil {
+	if err := derive(img, root); err != nil {
 		return err
 	}
 	fmt.Printf("%s を使ってアイコンを生成した\n", fontPath)
@@ -335,33 +348,6 @@ func drawRoundedRect(dst *image.RGBA, radius float64, c color.RGBA) {
 	r.QuadTo(n, n, rr, n)
 	r.ClosePath()
 	r.Draw(dst, dst.Bounds(), image.NewUniform(c), image.Point{})
-}
-
-// downscale は画像を size ピクセル四方へ縮小する。
-//
-// 元の大きさが縮小後の整数倍であることを前提に、対応する範囲の平均を取る。
-func downscale(src *image.RGBA, size int) *image.RGBA {
-	factor := src.Bounds().Dx() / size
-	dst := image.NewRGBA(image.Rect(0, 0, size, size))
-	for y := range size {
-		for x := range size {
-			var r, g, b, a int
-			for dy := range factor {
-				for dx := range factor {
-					c := src.RGBAAt(x*factor+dx, y*factor+dy)
-					r += int(c.R)
-					g += int(c.G)
-					b += int(c.B)
-					a += int(c.A)
-				}
-			}
-			n := factor * factor
-			dst.SetRGBA(x, y, color.RGBA{
-				R: uint8(r / n), G: uint8(g / n), B: uint8(b / n), A: uint8(a / n),
-			})
-		}
-	}
-	return dst
 }
 
 // writePNG は画像を PNG として書く。

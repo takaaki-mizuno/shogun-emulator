@@ -263,6 +263,9 @@ func TestSnapshotLinePerViewer(t *testing.T) {
 	u.host.Show(p)
 	u.host.Show(n)
 	p.src.setLine(30)
+	// コマ送りは今の位置からフレームの終わりまで進む。一時停止した位置が
+	// 行 30 より後のこともあるため、2 フレーム進めて行 30 を必ず通す。
+	advanceFrame(u)
 	advanceFrame(u)
 	p.Refresh()
 	n.Refresh()

@@ -605,7 +605,18 @@ func (e *Emulator) LoadState(data []byte) error {
 //
 // スクリーンショットとデバッガの表示が、命令の途中ではない一貫した
 // 状態を読むために使う。渡した関数の中で本体を保持しない。
+//
+// Start の前に呼ばれたときは、呼び出し元でその場で実行する。エミュレーション
+// ゴルーチンがまだ無く、処理を待つ相手がいないためである。GUI の組み立て
+// （連射の設定など）は Start の前に行われる。Start と同じゴルーチンから呼ぶ。
 func (e *Emulator) WithMachine(fn func(*nes.NES)) bool {
+	e.statusMu.Lock()
+	started := e.started
+	e.statusMu.Unlock()
+	if !started && !e.stopped() {
+		fn(e.machine)
+		return true
+	}
 	done := make(chan struct{})
 	if e.gate.active.Load() {
 		// 命令の途中で止まっている。待ちの中で実行する。

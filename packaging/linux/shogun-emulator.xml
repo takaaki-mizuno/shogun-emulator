@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-nes-rom">
+    <comment>NES ROM image</comment>
+    <comment xml:lang="ja">NES の ROM イメージ</comment>
+    <magic priority="50">
+      <match type="string" value="NES&#x1a;" offset="0"/>
+    </magic>
+    <glob pattern="*.nes"/>
+  </mime-type>
+</mime-info>
