@@ -1,7 +1,8 @@
 # 11 設定と CLI 設計
 
-- 文書バージョン: 1.0
+- 文書バージョン: 1.1
 - 作成日: 2026-09-21
+- 更新日: 2026-10-04（Agent Interface の追加に伴い §11.1・§11.2・§11.3・§11.3.1・§11.3.2・§11.5・§11.5.1・§11.5.2・§11.6 を更新し、§11.5.4 を追加）
 - 対象システム: Shogun Emulator（将軍エミュレータ）
 
 ---
@@ -31,6 +32,8 @@
 | `SHOGUN_MOVIE_DIR` | `paths.movieDir` |
 | `SHOGUN_LOG` | `debug.logOutput` |
 | `SHOGUN_LOG_CATEGORIES` | `debug.logCategories`（カンマ区切り） |
+| `SHOGUN_AGENT` | `agent.enabled`（`1` で有効） |
+| `SHOGUN_AGENT_LISTEN` | `agent.listen` |
 
 値を解釈できない環境変数は無視し、警告を出す。
 
@@ -90,6 +93,17 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 | シンボルとブレークポイント | `symbols/<rom-hash>.json` |
 | トレースの書き出し | `traces/<ROM 名>-<累積サイクル数>.log` |
 | CHR と PRG のオーバーレイ | `patches/<rom-hash>.json` |
+| Game State Definition（ROM のディレクトリに置けないとき） | `gamestate/<rom-hash>.json`（「14 Agent Interface 設計」§14.12.1） |
+| Repro | `repros/<rom-hash>/<日時>.repro/`（同 §14.16.3） |
+
+キャッシュディレクトリ以下に、Agent Interface の接続先を置く（「14 Agent Interface 設計」§14.5.1）。
+
+| 内容 | パス | パーミッション |
+|---|---|---|
+| 発見ファイル | `agent/<pid>.json` | 0600（Windows は所有者だけに読み書きを許す ACL） |
+| Unix ドメインソケット | `agent/<pid>.sock` | 0600 |
+
+接続先をデータディレクトリではなくキャッシュディレクトリに置くのは、プロセスの終了とともに意味を失う一時的なファイルであり、ポータブルモードの利用者の手元に残す必要がないためである。macOS のソケットパスの上限（104 バイト）に収まる短いパスでもある。プロセスが異常終了して残ったファイルは、クライアントが `pid` のプロセスの有無を調べて消す。
 
 `<rom-hash>` はヘッダを除いた PRG-ROM と CHR-ROM の SHA-1 の先頭 16 桁を 16 進で表した文字列とする。ヘッダを含めないのは、同じゲームのダンプでヘッダの内容が異なる場合があり、含めると別のゲームとして扱われるためである。
 
@@ -124,6 +138,7 @@ type Config struct {
     State     StateConfig     `json:"state"`
     Movie     MovieConfig     `json:"movie"`
     UI        UIConfig        `json:"ui"`
+    Agent     AgentConfig     `json:"agent"`
 }
 ```
 
@@ -249,6 +264,26 @@ type RecentROM struct {
 }
 ```
 
+```go
+type AgentConfig struct {
+    Enabled           bool   `json:"enabled"`           // GUI 版で Agent Interface を有効にする
+    Listen            string `json:"listen"`            // unix, tcp:127.0.0.1:PORT
+    MaxInstances      int    `json:"maxInstances"`      // headless の Instance の上限
+    ROMWatchAction    string `json:"romWatchAction"`    // notify, reload
+    ObserveImageScale int    `json:"observeImageScale"` // Observation の画像の既定の拡大率
+}
+```
+
+| キー | 既定値 | 内容 |
+|---|---|---|
+| `agent.enabled` | `false` | GUI 版で Agent Interface を有効にする。headless のサブコマンド（§11.5.4）はこの値によらず有効 |
+| `agent.listen` | `"unix"` | 接続方式（「14 Agent Interface 設計」§14.5.1） |
+| `agent.maxInstances` | 16 | headless の Instance の上限 |
+| `agent.romWatchAction` | `"notify"` | GUI 版で ROM ファイルの変化を見つけたときの動作（同 §14.15.2） |
+| `agent.observeImageScale` | 2 | Observation の画像の既定の拡大率（同 §14.9.3） |
+
+`agent` セクションの追加は設定ファイルの `version` を上げない。ファイルに無い項目は既定値のままとする規則（§11.3）で、古いファイルをそのまま読めるためである。
+
 空のパスは、そのパスの既定の場所（§11.2）を意味する。パスを空にできるようにするのは、利用者が場所を指定しなかったことと、既定の場所を明示的に指定したことを区別する必要がないためである。
 
 既定値を次に示す。
@@ -263,6 +298,7 @@ type RecentROM struct {
 | `video.scale` | 3 | 768×720 になる |
 | `video.filter` | `nearest` | 拡大時にドットがぼけない |
 | `video.overscanTop` / `overscanBottom` | 8 | 画面端の描画をゲームが整えていない場合がある |
+| `video.fullscreen` | `false` | 起動時にフルスクリーンにするかを表す。F11 やメニューでの切り替えはこの値を変えない |
 | `audio.sampleRate` | 48000 | リサンプル段が 1 つ減る |
 | `audio.bufferMilliseconds` | 25 | 高水位 2 倍で合計 50 ms に収まる |
 | `audio.ringHighWaterMultiplier` | 2 | 一時的な遅れを吸収する |
@@ -319,6 +355,10 @@ type RecentROM struct {
 | `ui.language` | `ja` |
 | `ui.theme` | `auto`・`light`・`dark` |
 | `ui.recentRoms` | 11 件目以降を捨てる |
+| `agent.listen` | `unix`、または `tcp:127.0.0.1:PORT`・`tcp:[::1]:PORT`（`PORT` は 0–65535）。他のアドレスは既定値に戻す |
+| `agent.maxInstances` | 1–64 |
+| `agent.romWatchAction` | `notify`・`reload` |
+| `agent.observeImageScale` | 1–4 |
 
 ### 11.3.2 反映の時期
 
@@ -328,7 +368,8 @@ type RecentROM struct {
 |---|---|
 | 即時 | `video` の全項目、`audio` のうちバッファ長・主音量・チャンネル別音量・早送り時のミュート・Triangle の超音波停止、キーバインドと連射、`debug.logCategories`・`debug.memoryEditWrite`・`debug.changeDecayFrames`、`ui.theme`・`ui.viewerLayout` |
 | ROM の再読み込み後 | `emulation` の全項目、`audio.filterProfile`、`input.port1Device`・`port2Device`、`paths` の全項目、`state` の全項目、`movie` の全項目、`debug.breakOnUninitializedRamRead` |
-| 再起動後 | `audio.enabled`、`debug.logOutput`・`debug.logMaxBytes`・`debug.logGenerations`・`debug.traceRingSize` |
+| 即時（Agent Interface） | `agent.enabled`（有効にすると待ち受けを始め、無効にすると全接続を切る）、`agent.romWatchAction`、`agent.observeImageScale` |
+| 再起動後 | `agent.listen`、`agent.maxInstances`、`audio.enabled`、`debug.logOutput`・`debug.logMaxBytes`・`debug.logGenerations`・`debug.traceRingSize` |
 
 `emulation` を ROM の再読み込み後とするのは、電源投入時の状態とマッパーの挙動を途中から変えると、実機に無い状態が生じるためである。
 
@@ -351,9 +392,12 @@ func (k *Keybindings) Save(path string) error
 
 ```
 shogun [オプション] [ROM ファイル]
+shogun serve|mcp|ctl|run [サブコマンドの引数...]
 ```
 
 ROM ファイルを引数に渡すと、それを開いて GUI を起動する。引数がないときは ROM を読み込まずに GUI を起動する。
+
+第 1 引数が `serve`・`mcp`・`ctl`・`run` のどれかのとき、Agent Interface のサブコマンドとして扱う（§11.5.4）。同じ名前の ROM ファイルを開くときは `./serve` のようにパスで渡す。
 
 標準ライブラリの `flag` を用いる。
 
@@ -388,11 +432,13 @@ ROM ファイルを引数に渡すと、それを開いて GUI を起動する�
 | `--log-categories LIST` | ログカテゴリをカンマ区切りで指定する |
 | `--trace-log PATH` | CPU トレースをこのファイルへ常時出力する（「09 デバッガ設計」§9.7） |
 | `--break-at ADDR` | 起動時に実行ブレークポイントを設定する。16 進（`$C000` または `C000`）。headless では止まった時点で理由を表示して終了する |
+| `--agent` | GUI 版で Agent Interface を有効にする（`agent.enabled` を上書き） |
+| `--agent-listen ADDR` | `agent.listen` を上書きする |
 | `--headless` | GUI を起動せずに実行する |
 | `--frames N` | N フレーム実行して終了する |
 | `--screenshot PATH` | 終了時にスクリーンショットを PNG で保存する |
 
-引数が不正なとき、および ROM を指定せずに `--headless` を指定したときは、理由を表示して終了コード 2 で終える。`--help` の出力はオプションを「表示と音声」「保存先」「ステートとムービー」「決定論」「デバッグ」「headless」に分けて並べる。
+引数が不正なとき、および ROM を指定せずに `--headless` を指定したときは、理由を表示して終了コード 2 で終える。`--help` の出力はオプションを「表示と音声」「保存先」「ステートとムービー」「決定論」「デバッグ」「AI」「headless」に分けて並べる。`--agent` と `--agent-listen` は「AI」に置く。サブコマンドの一覧（§11.5.4）をヘルプの末尾に示す。
 
 ### 11.5.2 headless モード
 
@@ -419,6 +465,8 @@ headless モードではオーディオデバイスを開かない。進行の�
 | 2 | 引数が不正である |
 | 3 | ムービーの再生で desync を検出した |
 | 4 | テスト ROM が失敗を報告した |
+| 5 | Scenario のアサーションが失敗した（`shogun run`） |
+| 6 | Scenario ファイルが不正である（`shogun run`） |
 
 ### 11.5.3 Windows でのコンソール接続
 
@@ -444,6 +492,29 @@ func attachConsoleIfNeeded() {
 `golang.org/x/sys/windows` は `AttachConsole` の関数を持たないため、`kernel32.dll` から呼ぶ。親プロセスにコンソールが無い（エクスプローラから起動した）ときは接続に失敗し、何もしない。
 
 `--log=stdout` と `--headless` を指定した場合に出力が見えるようにするための処理である。
+
+### 11.5.4 Agent Interface のサブコマンド
+
+| サブコマンド | 動作 | 詳細 |
+|---|---|---|
+| `shogun serve [--listen ADDR]` | headless の Host を持ち、JSON-RPC で待ち受ける。ROM は `instance.create` で読み込む | 「14 Agent Interface 設計」§14.5.1 |
+| `shogun mcp [--attach [PID]] [--rom PATH]` | MCP の stdio サーバ。既定はプロセス内に headless の Host を持つ。`--attach` で起動中のプロセスへ接続する | 同 §14.5.2 |
+| `shogun ctl [--pid PID] <名前空間> <操作> [引数...]` | 起動中のプロセスへ接続し、Agent Command を 1 つ実行して結果を表示する | 同 §14.5.3 |
+| `shogun run <Scenario...> [--junit PATH] [--update-golden] [--repro-dir DIR]` | Scenario を headless で実行する | 同 §14.17 |
+
+サブコマンドは、それぞれの引数に加えて §11.5.1 のうち次のオプションを受け付ける。それ以外のオプション（表示と音声に関するもの、`--headless` など）は受け付けず、終了コード 2 で終える。
+
+| 受け付けるオプション |
+|---|
+| `--config`、`--portable` |
+| `--region`、`--ram-init`、`--ram-seed`、`--deterministic`（Instance の既定値として使う） |
+| `--log`、`--log-dir`、`--log-categories` |
+
+`serve`・`mcp`・`run` はオーディオデバイスを開かず、Instance を `NoPacer` で動かす（§11.5.2 の headless モードと同じ）。設定ファイルへは書かない。
+
+`shogun mcp` は標準出力を MCP のメッセージだけに使う。ログを `--log=stdout` で標準出力へ出す指定は断り、終了コード 2 で終える。MCP のメッセージとログが混ざるとクライアントが読めなくなるためである。
+
+`shogun ctl` の終了コードは、Agent Command が成功したとき 0、エラーを返したとき 1、接続先が見つからないか接続できないとき 2 とする。
 
 ## 11.6 起動の流れ
 
@@ -471,6 +542,8 @@ graph TD
     ROM -->|yes| LOAD --> RUN
     ROM -->|no| IDLE
 ```
+
+引数の解析の時点で第 1 引数がサブコマンド（§11.5.4）であれば、パスの解決・設定の読み込み・上書き・ログの初期化までを同じ順に行い、GUI とオーディオを初期化せずにサブコマンドの処理へ進む。GUI 版で Agent Interface が有効なときは、GUI の構築の後に待ち受けを始める。
 
 オーディオの初期化に失敗したとき、音声を無効にして GUI の構築を続ける。`oto.NewContext` はプロセスで 1 回だけ呼ぶ。
 

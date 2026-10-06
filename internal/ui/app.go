@@ -85,6 +85,8 @@ type UI struct {
 
 	// refreshAnim は画面の更新を駆動するアニメーション。
 	refreshAnim *fyne.Animation
+	// appMenuLocalized は macOS のアプリケーションメニューを日本語にしたことを表す。
+	appMenuLocalized bool
 
 	// notifyMu はエミュレーションゴルーチンから届く知らせを守る。
 	notifyMu sync.Mutex
@@ -126,6 +128,8 @@ type UI struct {
 	settingsWin fyne.Window
 	// keyCapture はキーバインドの取り込み中であることを表す。ホットキーを止める。
 	keyCapture bool
+	// agentUI は Agent Interface の表示と状態。
+	agentUI agentUI
 }
 
 // New は画面を作る。
@@ -195,12 +199,16 @@ func (u *UI) Run() {
 	u.applyTheme()
 
 	u.win.SetOnClosed(func() {
+		u.closeAgent()
 		u.stopRefreshing()
 		u.saveWindowStates()
 		u.emu.Stop()
 	})
 
 	u.emu.Start()
+	if u.cfg.Agent.Enabled {
+		u.SetAgentEnabled(true, false)
+	}
 	u.startRefreshing()
 	u.reopenViewers()
 	if u.openDebugger {
@@ -285,7 +293,7 @@ func (u *UI) buildContent() fyne.CanvasObject {
 		dh := newDockedHost(u.tabs).(*dockedHost)
 		dh.onClosed = u.viewerClosed
 		u.host = dh
-		return container.NewBorder(nil, u.status.CanvasObject(), nil, nil,
+		return container.NewBorder(u.bannerObject(), u.status.CanvasObject(), nil, nil,
 			container.NewHSplit(center, u.tabs))
 	}
 	wh := newWindowHost(u.app).(*windowHost)
@@ -298,7 +306,7 @@ func (u *UI) buildContent() fyne.CanvasObject {
 	wh.onClosed = u.viewerClosed
 	wh.prepare = u.shareMainMenu
 	u.host = wh
-	return container.NewBorder(nil, u.status.CanvasObject(), nil, nil, center)
+	return container.NewBorder(u.bannerObject(), u.status.CanvasObject(), nil, nil, center)
 }
 
 // SetViewerLayout は配置を切り替える。
@@ -376,10 +384,17 @@ func (u *UI) stopRefreshing() {
 
 // refresh は画面とステータスバーを更新する。UI スレッドで実行される。
 func (u *UI) refresh() {
+	if !u.appMenuLocalized {
+		// GLFW がメニューバーを作るのはイベントループに入った後である。
+		localizeAppMenu()
+		u.appMenuLocalized = true
+	}
 	u.openQueuedFiles()
+	u.syncFullscreen()
 	u.screen.refresh()
 	u.drainNotices()
 	u.checkDesync()
+	u.refreshAgent()
 	u.status.update(u.emu.Status())
 	u.refreshViewers()
 }

@@ -48,7 +48,15 @@ func (e *Emulator) RunTo(addr uint16) {
 // カーソル位置まで）は、止める条件を置いて実行を再開する。コマンドの処理の
 // 中で待ち続けると、停止の操作を受け付けられなくなるためである。
 func (e *Emulator) startStep(v cmdStep) {
+	// 前の進行の結果を待っている者がいれば、打ち切りとして知らせる。
+	e.finishStep(StopCancelled)
+	e.beginPending(v.done)
+	if v.input != nil && e.agentInput != nil {
+		*e.agentInput = *v.input
+	}
+	e.stepCond, e.stepCondInstr, e.ignoreBreaks = v.cond, v.instr, v.noBreak
 	if e.machine == nil {
+		e.finishStep(StopCancelled)
 		return
 	}
 	e.paused = true
@@ -59,14 +67,21 @@ func (e *Emulator) startStep(v cmdStep) {
 	e.dbg.SkipExecAt(e.machine.CPU.PC)
 
 	switch v.kind {
-	case StepInstruction, StepFrame:
+	case StepInstruction:
 		e.runSteps(v.kind, max(v.count, 1))
+		e.finishStep(StopStepDone)
+	case StepFrame:
+		e.runSteps(v.kind, max(v.count, 1))
+		e.finishStep(StopFramesDone)
 	case StepCycle:
 		e.stepCycles(max(v.count, 1))
+		// 命令を終えるまでに数えきった場合は、命令境界で止まっている。
+		e.finishStep(StopStepDone)
 	case StepOver:
 		pc, s := e.machine.CPU.PC, e.machine.CPU.S
 		if e.machine.Peek(pc) != opcodeJSR {
 			e.runSteps(StepInstruction, 1)
+			e.finishStep(StopStepDone)
 			return
 		}
 		ret := pc + 3
@@ -114,4 +129,5 @@ func (e *Emulator) checkUntil() {
 	e.paused = true
 	e.setPaused(true)
 	e.updateStatus()
+	e.finishStep(StopStepDone)
 }

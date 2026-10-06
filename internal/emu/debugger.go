@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
+	"github.com/takaakimizuno/shogun-emulator/internal/emu/movie"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/cart"
 )
@@ -38,6 +39,9 @@ type gateRequest struct {
 	// fn は待ったまま実行する処理。表示のために状態を読む。
 	fn   func()
 	done chan struct{}
+	// result は steps の進行が止まったときに結果を受け取る。nil のとき
+	// 知らせない。
+	result chan StepResult
 }
 
 // newCycleGate は受け渡しを作る。
@@ -66,6 +70,8 @@ func (g *cycleGate) release() {
 type debugState struct {
 	// budget はサイクル単位ステップで残っている CPU サイクル数。
 	budget int
+	// midBreak は命令の途中のブレークポイントを処理していることを表す。
+	midBreak bool
 	// gateStatus は待っている間に UI へ見せる位置。
 	gateMu     sync.Mutex
 	gateStatus GatePosition
@@ -112,7 +118,7 @@ func (e *Emulator) stepCycles(count int) {
 	e.dbg.CycleHook = e.onCycleGate
 	e.dbg.RefreshHooks()
 	if e.stepOnce() {
-		e.beginFrame()
+		e.frameBoundary()
 	}
 	e.leaveCycleMode()
 	e.afterStep()
@@ -140,9 +146,16 @@ func (e *Emulator) onCycleGate() {
 
 // onCycleBreak は命令の途中でブレークポイントに当たったときに呼ばれる。
 func (e *Emulator) onCycleBreak() {
+	if e.ignoreBreaks {
+		e.dbg.ClearHit()
+		return
+	}
 	e.paused = true
 	e.setPaused(true)
+	// 命令の途中で止まったことを結果に含める。
+	e.debug.midBreak = true
 	e.takeBreak()
+	e.debug.midBreak = false
 	e.until = nil
 	e.waitInGate()
 }
@@ -160,6 +173,8 @@ func (e *Emulator) waitInGate() {
 	e.debug.gateMu.Unlock()
 	e.gate.active.Store(true)
 	e.setCycleStepping(true)
+	// サイクル単位の進行はここで止まる。待ちに入る前に結果を知らせる。
+	e.finishStep(StopStepDone)
 	defer func() {
 		e.gate.active.Store(false)
 		e.setCycleStepping(false)
@@ -177,6 +192,9 @@ func (e *Emulator) waitInGate() {
 				close(r.done)
 			case r.steps > 0:
 				// サイクルの待ちを続ける。次のサイクルの終わりで再び待つ。
+				if r.result != nil {
+					e.beginPending(r.result)
+				}
 				e.debug.budget = r.steps
 				e.dbg.CycleHook = e.onCycleGate
 				return
@@ -197,6 +215,10 @@ func (e *Emulator) afterStep() {
 
 // takeBreak はデバッガが止まる理由を持っていれば取り出して知らせる。
 func (e *Emulator) takeBreak() bool {
+	if e.ignoreBreaks {
+		e.dbg.ClearHit()
+		return false
+	}
 	info, ok := e.dbg.TakeHit()
 	if !ok {
 		return false
@@ -208,6 +230,12 @@ func (e *Emulator) takeBreak() bool {
 	e.status.Break = info.Reason
 	e.statusMu.Unlock()
 	e.notifyMessage(info.Reason)
+	// イベントを積んでから進行の結果を返す。結果を受け取った直後の観測で、
+	// このイベントが数えられるようにするためである。
+	if o := e.observer.Load(); o != nil && o.OnBreak != nil {
+		o.OnBreak(info, e.machine.Frames())
+	}
+	e.finishStepBreak(info)
 	if e.cfg.OnBreak != nil {
 		e.cfg.OnBreak(info)
 	}
@@ -234,12 +262,27 @@ func (e *Emulator) setCycleStepping(v bool) {
 //
 // ROM ごとに保存した名前とブレークポイントを読む。読めないときは
 // 空の状態で続ける。
-func (e *Emulator) attachDebugger(m *nes.NES) {
-	syms, err := debug.LoadSymbols(e.symbolsPath(m))
+func (e *Emulator) attachDebugger(m *nes.NES, romPath string) {
+	load := e.cfg.LoadSymbols
+	if load == nil {
+		load = debug.LoadSymbols
+	}
+	syms, err := load(e.symbolsPath(m))
 	if err != nil {
 		e.notifyError(err)
 		syms = debug.NewSymbols()
 	}
+	// ブレークポイントの条件式が .dbg の名前を使えるよう、Attach の前に読む。
+	// パスの分からない読み込み（Fork）と、共有する Symbols を読み込み済みの
+	// ときは読まない。
+	var notes []string
+	if romPath != "" && !syms.ProjectLoaded() {
+		notes = debug.LoadProject(syms, romPath,
+			debug.ProjectPathsFor(romPath, e.cfg.Dirs.Data, cart.ROMKeyString(m.ROM.Hash[:])))
+	}
+	e.statusMu.Lock()
+	e.projectNotes = notes
+	e.statusMu.Unlock()
 	e.dbg.CycleHook = nil
 	e.dbg.OnCycleBreak = e.onCycleBreak
 	e.dbg.Attach(m, syms)
@@ -327,6 +370,11 @@ func (e *Emulator) Poke(space debug.Space, addr int, v uint8, withSideEffects bo
 			return
 		}
 		err = debug.WriteMemory(m, space, addr, v, withSideEffects)
+		if err == nil {
+			// 常時記録は利用者のムービー記録ではないため、編集を断らずに介入として
+			// 残す（設計書 14 編 §14.16.2）。
+			e.intervene(movie.Record{Kind: movie.KindPoke, Space: uint8(space), Addr: uint32(addr), Value: uint32(v), Flag: withSideEffects})
+		}
 	})
 	if !ok {
 		return errors.New("emu: エミュレーションが停止している")

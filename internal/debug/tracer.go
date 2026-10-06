@@ -29,6 +29,16 @@ type Tracer struct {
 	out *bufio.Writer
 	// outErr は常時の出力で起きた最初のエラー。
 	outErr error
+
+	// frames はフレームの開始のサイクル数の表（traceq.go）。リングの範囲に
+	// 合わせて古いものを捨てる。
+	frames []FrameStart
+	// ints と intCount は割り込みのリング。
+	ints     []IntEvent
+	intCount uint64
+	// bus と busCount はバスアクセスのリング（bus: true のときだけ）。
+	bus      []BusAccess
+	busCount uint64
 }
 
 // NewTracer はトレースを作る。size が 0 以下のとき既定値を使う。
@@ -69,6 +79,9 @@ func (t *Tracer) Count() uint64 { return t.count }
 func (t *Tracer) Clear() {
 	t.next = 0
 	t.count = 0
+	t.frames = nil
+	t.intCount = 0
+	t.busCount = 0
 }
 
 // WriteTo はリングの内容を古い順に書き出す。

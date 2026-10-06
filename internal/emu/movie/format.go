@@ -13,8 +13,13 @@ import (
 // Magic はムービーの先頭に置く 4 バイト。
 const Magic = "SHGM"
 
-// FormatVersion はムービーの形式のバージョン。
-const FormatVersion = 1
+// FormatVersion はムービーの形式のバージョン。介入のレコードを含むとき 2、
+// 含まないとき 1 で書く（設計書 08 編 §8.7.2）。
+const FormatVersion = 2
+
+// formatVersionV1 は介入のレコードを持たない形式のバージョン。介入を含まない
+// ムービーをバージョン 1 のまま書き、既存のムービーと期待値を保つ。
+const formatVersionV1 = 1
 
 // StartKind はムービーの開始方法。
 type StartKind uint8
@@ -81,7 +86,26 @@ const (
 	KindHardReset
 	// KindChecksum は状態のハッシュ。
 	KindChecksum
+	// KindPoke はメモリの書き換え（バージョン 2）。
+	KindPoke
+	// KindSetRegister は CPU のレジスタの書き換え（バージョン 2）。
+	KindSetRegister
+	// KindFreeze は値の固定（バージョン 2）。
+	KindFreeze
+	// KindUnfreeze は固定の解除（バージョン 2）。
+	KindUnfreeze
+	// KindOverlay はオーバーレイの有効・無効の切り替え（バージョン 2）。
+	KindOverlay
 )
+
+// IsIntervention は入力以外で Machine State を変えた操作（介入）のレコードかを
+// 返す（設計書 14 編 §14.16.2）。
+func (k Kind) IsIntervention() bool { return k >= KindPoke && k <= KindOverlay }
+
+// EndOfFrame は介入のレコードのサイクル数で「フレームの終わり」を表す値。
+// 記録の最後のフレームの後（次のフレームの開始を待っている間）に行った介入に
+// 使う。再生では記録の終わりで適用する。
+const EndOfFrame = ^uint32(0)
 
 // Record はムービーのレコード 1 つ。
 //
@@ -93,6 +117,22 @@ type Record struct {
 	Buttons [2]uint8
 	// Hash は Kind が KindChecksum のときの状態のハッシュ。
 	Hash [8]uint8
+
+	// 以下は介入のレコードの内容。
+	// Cycle はフレームの開始から数えた CPU サイクル数。
+	Cycle uint32
+	// Space はポークの空間（「09 デバッガ設計」§9.4.5 の空間の番号）。
+	Space uint8
+	// Addr はポークの空間内のオフセット、Freeze の CPU アドレス。
+	Addr uint32
+	// Value はポーク（1 バイト）・レジスタ（2 バイト）・Freeze（4 バイト）の値。
+	Value uint32
+	// Size は Freeze のバイト数。
+	Size uint8
+	// Reg はレジスタの番号（0: A、1: X、2: Y、3: S、4: PC、5: P）。
+	Reg uint8
+	// Flag はポークの副作用の有無、オーバーレイの有効。
+	Flag bool
 }
 
 // Movie はヘッダとレコードの並び。
@@ -114,7 +154,14 @@ func (m *Movie) Encode() []uint8 {
 	endHeader := w.Section(headerSection)
 	h := &m.Header
 	w.RawBytes([]uint8(Magic))
-	w.U16(FormatVersion)
+	version := uint16(formatVersionV1)
+	for _, rec := range m.Records {
+		if rec.Kind.IsIntervention() {
+			version = FormatVersion
+			break
+		}
+	}
+	w.U16(version)
 	w.String(h.Version)
 	w.String(h.Commit)
 	w.RawBytes(h.ROMHash[:])
@@ -155,10 +202,47 @@ func encodeRecords(records []Record) []uint8 {
 			out = append(out, rec.Buttons[0], rec.Buttons[1])
 		case KindChecksum:
 			out = append(out, rec.Hash[:]...)
+		case KindPoke:
+			out = le32(out, rec.Cycle)
+			out = append(out, rec.Space)
+			out = le32(out, rec.Addr)
+			out = append(out, uint8(rec.Value), b2u(rec.Flag))
+		case KindSetRegister:
+			out = le32(out, rec.Cycle)
+			out = append(out, rec.Reg, uint8(rec.Value), uint8(rec.Value>>8))
+		case KindFreeze:
+			out = le32(out, rec.Cycle)
+			out = append(out, uint8(rec.Addr), uint8(rec.Addr>>8), rec.Size)
+			out = le32(out, rec.Value)
+		case KindUnfreeze:
+			out = le32(out, rec.Cycle)
+			out = append(out, uint8(rec.Addr), uint8(rec.Addr>>8))
+		case KindOverlay:
+			out = le32(out, rec.Cycle)
+			out = append(out, b2u(rec.Flag))
 		}
 	}
 	return out
 }
+
+func le32(b []uint8, v uint32) []uint8 {
+	return append(b, uint8(v), uint8(v>>8), uint8(v>>16), uint8(v>>24))
+}
+
+func rd32(b []uint8) uint32 {
+	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
+}
+
+func b2u(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// interventionSizes は介入のレコードの種別バイトを除いた大きさ（設計書 08 編
+// §8.7.2 の表）。
+var interventionSizes = map[Kind]int{KindPoke: 11, KindSetRegister: 7, KindFreeze: 11, KindUnfreeze: 6, KindOverlay: 5}
 
 // decodeRecords はバイト列をレコードの並びに戻す。
 func decodeRecords(b []uint8) ([]Record, error) {
@@ -182,6 +266,26 @@ func decodeRecords(b []uint8) ([]Record, error) {
 			copy(rec.Hash[:], b[i:])
 			i += len(rec.Hash)
 		case KindReset, KindHardReset:
+		case KindPoke, KindSetRegister, KindFreeze, KindUnfreeze, KindOverlay:
+			n := interventionSizes[k]
+			if i+n > len(b) {
+				return nil, fmt.Errorf("movie: 介入のレコードが途中で切れている（位置 %d）", i)
+			}
+			p := b[i : i+n]
+			rec.Cycle = rd32(p)
+			switch k {
+			case KindPoke:
+				rec.Space, rec.Addr, rec.Value, rec.Flag = p[4], rd32(p[5:]), uint32(p[9]), p[10] != 0
+			case KindSetRegister:
+				rec.Reg, rec.Value = p[4], uint32(p[5])|uint32(p[6])<<8
+			case KindFreeze:
+				rec.Addr, rec.Size, rec.Value = uint32(p[4])|uint32(p[5])<<8, p[6], rd32(p[7:])
+			case KindUnfreeze:
+				rec.Addr = uint32(p[4]) | uint32(p[5])<<8
+			case KindOverlay:
+				rec.Flag = p[4] != 0
+			}
+			i += n
 		default:
 			return nil, fmt.Errorf("movie: 知らないレコード種別 %d（位置 %d）", k, i-1)
 		}
@@ -209,9 +313,9 @@ func Decode(b []uint8) (*Movie, error) {
 		return nil, fmt.Errorf("movie: マジックが一致しない（期待 %q、実際 %q）", Magic, magic)
 	}
 	h.FormatVersion = r.U16()
-	if h.FormatVersion != FormatVersion {
-		return nil, fmt.Errorf("movie: 形式のバージョンが違う（期待 %d、実際 %d）",
-			FormatVersion, h.FormatVersion)
+	if h.FormatVersion != formatVersionV1 && h.FormatVersion != FormatVersion {
+		return nil, fmt.Errorf("movie: 形式のバージョンが違う（期待 %d か %d、実際 %d）",
+			formatVersionV1, FormatVersion, h.FormatVersion)
 	}
 	h.Version = r.String()
 	h.Commit = r.String()

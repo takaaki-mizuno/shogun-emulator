@@ -15,6 +15,8 @@ type Frame struct {
 	HardReset bool
 	// Checksum はこのフレームで照合するハッシュ。持たないとき nil。
 	Checksum *[8]uint8
+	// Interventions はこのフレームの介入。サイクル数の昇順。
+	Interventions []Record
 }
 
 // Player はムービーを再生する。
@@ -68,8 +70,16 @@ func (p *Player) BeginFrame() (Frame, bool) {
 				f.Checksum = &h
 				p.pos++
 			}
+			// 入力の後に置いた介入は、このフレームのもの。
+			for p.pos < len(p.movie.Records) && p.movie.Records[p.pos].Kind.IsIntervention() {
+				f.Interventions = append(f.Interventions, p.movie.Records[p.pos])
+				p.pos++
+			}
 			p.frame++
 			return f, true
+		default:
+			// 入力より前に現れる介入は無い。読み飛ばす。
+			p.pos++
 		}
 	}
 	return f, false

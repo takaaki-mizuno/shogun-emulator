@@ -91,7 +91,7 @@ func (c *CPU) resolve(op *opcode) uint16 {
 
 // addrImplied は次の命令バイトを読んで捨てる。PC は進めない。
 func (c *CPU) addrImplied() uint16 {
-	c.read(c.PC)
+	c.dummyRead(c.PC)
 	return 0
 }
 
@@ -116,7 +116,7 @@ func (c *CPU) addrZeroPage() uint16 {
 // 上位バイトは常に $00 であり、ページ境界のラップは処理されない。
 func (c *CPU) addrZeroPageIndexed(index uint8) uint16 {
 	base := c.fetch()
-	c.read(uint16(base))
+	c.dummyRead(uint16(base))
 	return uint16(base + index)
 }
 
@@ -143,7 +143,7 @@ func (c *CPU) addrAbsoluteIndexed(index uint8, access accessKind) uint16 {
 	c.indexBase, c.indexCrossed = base, crossed
 	if crossed || access != accessRead {
 		// 上位バイトが修正される前の不正なアドレスを読む
-		c.read(base&0xFF00 | addr&0x00FF)
+		c.dummyRead(base&0xFF00 | addr&0x00FF)
 	}
 	return addr
 }
@@ -154,7 +154,7 @@ func (c *CPU) addrAbsoluteIndexed(index uint8, access accessKind) uint16 {
 // 処理されない。
 func (c *CPU) addrIndirectX() uint16 {
 	ptr := c.fetch()
-	c.read(uint16(ptr))
+	c.dummyRead(uint16(ptr))
 	ptr += c.X
 	lo := c.read(uint16(ptr))
 	hi := c.read(uint16(ptr + 1))
@@ -174,7 +174,7 @@ func (c *CPU) addrIndirectY(access accessKind) uint16 {
 	crossed := addr&0xFF00 != base&0xFF00
 	c.indexBase, c.indexCrossed = base, crossed
 	if crossed || access != accessRead {
-		c.read(base&0xFF00 | addr&0x00FF)
+		c.dummyRead(base&0xFF00 | addr&0x00FF)
 	}
 	return addr
 }

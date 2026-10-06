@@ -47,6 +47,18 @@ func BenchmarkFrameWithDebugger(b *testing.B) {
 		{"トレース", func(d *debug.Debugger) {
 			d.SetFeatures(debug.Features{Tracing: true})
 		}},
+		// Agent Interface の解析（計画フェーズ 20 §3.11）。項目ごとに分ける。
+		{"Diagnostic既定", func(d *debug.Debugger) { d.SetDiagConfig(debug.DefaultDiagConfig()) }},
+		{"Diagnostic全項目", func(d *debug.Debugger) { d.SetDiagConfig(allDiagnostics()) }},
+		{"トレース(bus)", func(d *debug.Debugger) {
+			d.SetAgentTrace(debug.AgentTrace{Enabled: true, RingSize: debug.DefaultTraceRingSize, BusRingSize: 2_000_000})
+		}},
+		{"プロファイル", func(d *debug.Debugger) { d.StartProfile(debug.ProfileOptions{}) }},
+		{"解析すべて", func(d *debug.Debugger) {
+			d.SetDiagConfig(allDiagnostics())
+			d.SetAgentTrace(debug.AgentTrace{Enabled: true, RingSize: debug.DefaultTraceRingSize, BusRingSize: 2_000_000})
+			d.StartProfile(debug.ProfileOptions{})
+		}},
 	}
 	for _, c := range cases {
 		b.Run(c.name, func(b *testing.B) {

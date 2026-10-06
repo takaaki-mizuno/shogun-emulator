@@ -112,6 +112,10 @@ Shogun Emulator.app/
 | `LSMinimumSystemVersion` | `11.0` |
 | `NSHighResolutionCapable` | `true` |
 
+バンドルに入れずに実行ファイルを直接起動したときもメニューバーの名前が `Shogun Emulator` になるよう、`CFBundleName` などを書いた `internal/ui/info_darwin.plist` をリンク時に実行ファイルの `__TEXT,__info_plist` セクションへ埋め込む（cgo の `-Wl,-sectcreate`）。
+
+アプリケーションメニュー（「Shogun Emulatorについて」「Shogun Emulatorを終了」など）とウインドウメニューの項目は GLFW が英語の固定の文言で作る。起動後に UI スレッドで、項目の action を手がかりに日本語の文言へ差し替える。
+
 `CFBundleDocumentTypes` と、`.nes` を `public.data` に準じる種類として宣言する `UTImportedTypeDeclarations` を設定することで、Finder から `.nes` ファイルを本アプリケーションで開ける。
 
 Finder で開いたファイルは起動引数ではなく、「書類を開く」の Apple イベント（`kAEOpenDocuments`）で届く。Fyne はこのイベントを扱わないため、`internal/ui` の macOS 専用のコード（cgo と Objective-C）で受け取る。受け取る処理は `NSApplicationWillFinishLaunchingNotification` の通知の中で `NSAppleEventManager` に登録する。`NSApplication` は起動の完了の前に既定の受け取り口を登録し、この通知の時点で登録したものがそれを上書きするためである。届いたパスは溜めておき、画面の更新のときに UI スレッドで開く。起動中にアプリケーションがすでに動いているときに届いたファイルも同じ経路で開く。
@@ -178,7 +182,7 @@ OpenGL・X11・Wayland・PulseAudio・ALSA のライブラリは AppImage に収
 
 | 文書 | 内容 |
 |---|---|
-| `USAGE.md`（`packaging/usage.md`） | 動作環境、起動の仕方、Gatekeeper と SmartScreen の回避手順、設定とセーブデータの保存先、キーバインドの既定値、テスト ROM の取得方法（開発者向け） |
+| `USAGE.md`（`packaging/usage.md`） | 動作環境、起動の仕方、Gatekeeper と SmartScreen の回避手順、設定とセーブデータの保存先、キーバインドの既定値、AI から使う手順（Claude Code への登録、GUI との共有、安全のための注意）、テスト ROM の取得方法（開発者向け） |
 | `LICENSE` | 本体のライセンス |
 | `THIRD_PARTY_LICENSES.txt` | 実行ファイルに含まれる依存モジュールのライセンス。`go run ./tools/package licenses` が `go list -deps` の結果から各モジュールのライセンスファイルを集めて作る |
 

@@ -143,7 +143,7 @@ func TestDisassemblerConfirmsExecuted(t *testing.T) {
 	})
 	n.Bus.Poke(0x0305, 0x42)
 	syms := NewSymbols()
-	syms.SetLabel(0x8010, "sub")
+	syms.SetLabel(0x8010, "sub", nil)
 	d := New(NewLogger(0, nil), 16, 0)
 	d.Attach(n, syms)
 	d.SetFeatures(Features{CPUView: true})
@@ -173,7 +173,7 @@ func TestDisassemblerConfirmsExecuted(t *testing.T) {
 // 読み戻せることを確かめる（設計書 09 編 §9.9）。
 func TestSymbolsRoundTrip(t *testing.T) {
 	s := NewSymbols()
-	s.SetLabel(0x0300, "score")
+	s.SetLabel(0x0300, "score", nil)
 	s.MarkRegion(0x10, 0x1F, RegionData)
 	s.AddWatch(0x0300)
 	c, err := ParseCondition("A == $42")
@@ -193,13 +193,13 @@ func TestSymbolsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Label(0x0300) != "score" || !got.IsData(0x15) || got.IsData(0x20) {
+	if got.LabelAt(0x0300, nil) != "score" || !got.IsData(0x15) || got.IsData(0x20) {
 		t.Error("名前または領域が読み戻せない")
 	}
 	if w := got.Watch(); len(w) != 1 || w[0] != 0x0300 {
 		t.Errorf("ウォッチ = %v", w)
 	}
-	bps := got.Breakpoints()
+	bps := got.Breakpoints(nil)
 	if len(bps) != 3 {
 		t.Fatalf("ブレークポイントの数 = %d, 期待 3", len(bps))
 	}

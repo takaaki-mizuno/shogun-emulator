@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
@@ -82,6 +83,13 @@ type Config struct {
 	// nil のときは音声の有無で決める。音声が有効なら、リングバッファの
 	// 高水位が待ちを担うため待たない Pacer を使う。無効なら壁時計で待つ。
 	NewPacer func(r *region.Region) Pacer
+	// LoadSymbols は ROM ごとの名前とブレークポイントを読む。nil のとき
+	// ファイルから読む（debug.LoadSymbols）。
+	//
+	// 同じ ROM を読み込んだ複数の Instance が 1 つの Symbols を共有する
+	// ために使う（設計書 14 編 §14.3.1）。別々に読むと、終了時に互いの
+	// 内容で上書きし合う。
+	LoadSymbols func(path string) (*debug.Symbols, error)
 }
 
 // Status は UI へ見せる実行状態。
@@ -172,10 +180,11 @@ type Emulator struct {
 	// stopOnce は多重の停止を防ぐ。
 	stopOnce sync.Once
 
-	// statusMu は status と started を守る。
-	statusMu sync.Mutex
-	status   Status
-	started  bool
+	// statusMu は status と started と projectNotes を守る。
+	statusMu     sync.Mutex
+	status       Status
+	started      bool
+	projectNotes []string
 
 	// desyncMu は desyncErr を守る。
 	desyncMu  sync.Mutex
@@ -230,6 +239,30 @@ type Emulator struct {
 	pacer         Pacer
 	speed         float64
 	paused        bool
+	// pending は進行の結果を待っている者への知らせ先。待っていないとき nil。
+	pending chan StepResult
+	// agentInput はエージェントが与える入力。nil のときキーボードの入力を
+	// 使う（設計書 14 編 §14.4.2）。
+	agentInput *[2]uint8
+	// framePending はフレームの開始時の処理を遅らせていることを表す。
+	framePending bool
+	// stepCond と stepCondInstr は進行を止める条件（cmdStep.cond）。
+	stepCond      func() bool
+	stepCondInstr bool
+	// ignoreBreaks は進行の間ブレークポイントで止まらないことを表す。
+	ignoreBreaks bool
+
+	// journal は常時記録。エミュレーションゴルーチンだけが触る。
+	journal journalState
+	// incoming は再生中のこのフレームの介入。フレームの開始の記録の後で受け取る。
+	incoming []movie.Record
+
+	// observer は Agent Interface のイベントの知らせ先（SetObserver）。
+	observer atomic.Pointer[Observer]
+
+	// cancelStep は進行の取り消しを伝える。StepAndWait の呼び出し側が
+	// 立て、コマンドの処理の中で進めている間にも気付けるようにする。
+	cancelStep atomic.Bool
 }
 
 // New は Emulator を作る。ゴルーチンはまだ起動しない。
@@ -258,6 +291,11 @@ func New(cfg Config) *Emulator {
 	}
 	e.status.Speed = 1.0
 	e.dbg = newDebugger(cfg)
+	e.dbg.DiagHook = func(x debug.Diagnostic) {
+		if o := e.observer.Load(); o != nil && o.OnDiagnostic != nil {
+			o.OnDiagnostic(x)
+		}
+	}
 
 	if cfg.Audio.Enabled {
 		p, err := newAudioPipeline(cfg.Audio, cfg.AppName)
@@ -293,6 +331,26 @@ func (e *Emulator) Dirs() config.Paths { return e.cfg.Dirs }
 //
 // エミュレーションゴルーチンを起動する前に呼ぶ。
 func (e *Emulator) SetOnBreak(fn func(info debug.BreakInfo)) { e.cfg.OnBreak = fn }
+
+// Observer は Agent Interface がイベント（設計書 14 編 §14.14）を積むための
+// 知らせ先。すべてエミュレーションゴルーチンから呼ばれる。待たずに戻ること。
+type Observer struct {
+	// OnBreak はブレークポイントで止まったときに呼ばれる。
+	OnBreak func(info debug.BreakInfo, frame uint64)
+	// OnLoad は ROM を読み込んだときに呼ばれる。
+	OnLoad func(name string)
+	// OnDesync はムービーの再生で desync を検出したときに呼ばれる。
+	OnDesync func(err error, frame uint64)
+	// OnDiagnostic は Diagnostic の種類と位置の組の最初の 1 件で呼ばれる
+	// （設計書 14 編 §14.20.3）。エミュレーションゴルーチンから呼ばれる。
+	OnDiagnostic func(x debug.Diagnostic)
+}
+
+// SetObserver は知らせ先を差し替える。nil で外す。いつ呼んでもよい。
+//
+// GUI の知らせ（Config.OnBreak）とは別に持つ。GUI 版で Agent Interface を
+// 有効にしたり無効にしたりしても、GUI の知らせを変えないためである。
+func (e *Emulator) SetObserver(o *Observer) { e.observer.Store(o) }
 
 // SetNotify は知らせの送り先を差し替える。
 //
@@ -379,12 +437,39 @@ func (e *Emulator) LoadROM(path string) error {
 	if err != nil {
 		return err
 	}
-	m, bat, err := e.buildMachine(data)
-	if err != nil {
+	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if err := e.LoadROMDataFrom(data, name, path); err != nil {
 		return fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
-	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	return e.apply(cmdLoadMachine{machine: m, battery: bat, name: name, done: make(chan error, 1)})
+	return nil
+}
+
+// LoadROMData は読み込み済みの ROM の内容を読み込む。name は表示に使う名前。
+//
+// Agent Interface の Fork が、元の Instance と同じ内容を読み込むために使う
+// （設計書 14 編 §14.3.2）。ファイルを読み直すと、ビルドで書き換わった
+// 別の内容を読むおそれがある。
+func (e *Emulator) LoadROMData(data []uint8, name string) error {
+	return e.LoadROMDataFrom(data, name, "")
+}
+
+// LoadROMDataFrom は読み込み済みの ROM の内容を、元のファイルのパスと共に
+// 読み込む。パスから同じディレクトリの .dbg と Game State Definition を探す
+// （設計書 14 編 §14.11.2、§14.12.1）。
+func (e *Emulator) LoadROMDataFrom(data []uint8, name, path string) error {
+	m, bat, err := e.buildMachine(data)
+	if err != nil {
+		return err
+	}
+	return e.apply(cmdLoadMachine{machine: m, battery: bat, name: name, path: path, done: make(chan error, 1)})
+}
+
+// ProjectNotes は直前の ROM の読み込みで、.dbg と Game State Definition に
+// ついて知らせることを返す。
+func (e *Emulator) ProjectNotes() []string {
+	e.statusMu.Lock()
+	defer e.statusMu.Unlock()
+	return append([]string(nil), e.projectNotes...)
 }
 
 // buildMachine は ROM のデータから本体を組み立て、電源を入れる。

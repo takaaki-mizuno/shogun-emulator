@@ -2,7 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // logCategoryNames は debug.logCategories に書けるカテゴリ名（設計書 09 編 §9.8）。
@@ -131,5 +134,34 @@ func (c *Config) Validate() []string {
 	if len(ui.RecentROMs) > MaxRecentROMs {
 		ui.RecentROMs = ui.RecentROMs[:MaxRecentROMs]
 	}
+
+	ag := &c.Agent
+	if !ValidAgentListen(ag.Listen) {
+		w = append(w, fmt.Sprintf("agent.listen の値 %q は使えないため %q にする", ag.Listen, d.Agent.Listen))
+		ag.Listen = d.Agent.Listen
+	}
+	intRange("agent.maxInstances", &ag.MaxInstances, d.Agent.MaxInstances, 1, 64)
+	choice("agent.romWatchAction", &ag.RomWatchAction, d.Agent.RomWatchAction, RomWatchNotify, RomWatchReload)
+	intRange("agent.observeImageScale", &ag.ObserveImageScale, d.Agent.ObserveImageScale, 1, 4)
 	return w
+}
+
+// ValidAgentListen は agent.listen に書ける値かを返す（設計書 11 編 §11.3.1）。
+//
+// TCP は 127.0.0.1 と ::1 に限る。他のアドレスで待ち受けると、同じ
+// ネットワークの他の機械から操作できてしまう（設計書 14 編 §14.21）。
+func ValidAgentListen(v string) bool {
+	if v == AgentListenUnix {
+		return true
+	}
+	rest, ok := strings.CutPrefix(v, "tcp:")
+	if !ok {
+		return false
+	}
+	host, port, err := net.SplitHostPort(rest)
+	if err != nil || (host != "127.0.0.1" && host != "::1") {
+		return false
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n >= 0 && n <= 65535
 }

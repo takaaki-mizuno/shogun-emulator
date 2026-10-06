@@ -2,6 +2,7 @@ package emu
 
 import (
 	"errors"
+	"github.com/takaakimizuno/shogun-emulator/internal/emu/movie"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/apu"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/cart"
@@ -83,7 +84,7 @@ func (e *Emulator) advance() {
 	}
 	e.checkUntil()
 	if done {
-		e.beginFrame()
+		e.frameBoundary()
 		e.pollBattery()
 		e.pacer.WaitFrame(e.speed)
 		e.updateStatus()
@@ -92,6 +93,13 @@ func (e *Emulator) advance() {
 
 // stepOnce は 1 命令進め、フレームが完成したかを返す。
 func (e *Emulator) stepOnce() bool {
+	if e.framePending {
+		// エージェントの入力の Instance では、フレームの開始時の処理を
+		// そのフレームの最初の命令の直前まで遅らせている（frameBoundary）。
+		e.framePending = false
+		e.beginFrame()
+	}
+	e.applyDueInterventions()
 	before := e.machine.Frames()
 	e.machine.StepInstruction()
 	if e.machine.Frames() == before {
@@ -110,9 +118,14 @@ func (e *Emulator) runSteps(kind StepKind, count int) {
 		return
 	}
 	for range count {
+		if e.cancelStep.Load() {
+			// 待っている者が取り消した。ここまでの位置で止める。
+			e.finishStep(StopCancelled)
+			break
+		}
 		if kind == StepInstruction {
 			if e.stepOnce() {
-				e.beginFrame()
+				e.frameBoundary()
 			}
 			if e.takeBreak() {
 				break
@@ -122,12 +135,31 @@ func (e *Emulator) runSteps(kind StepKind, count int) {
 		// フレームが完成するまで命令を進める。STP を実行した後も
 		// バスは進むため、この繰り返しは必ず終わる。ブレークポイントに
 		// 当たったときはそこで止める。
-		for !e.stepOnce() && !e.dbg.HasHit() {
+		met := false
+		for !e.stepOnce() {
+			if e.dbg.HasHit() {
+				if !e.ignoreBreaks {
+					break
+				}
+				e.dbg.ClearHit()
+			}
+			if e.stepCond != nil && e.stepCondInstr && e.stepCond() {
+				met = true
+				break
+			}
+		}
+		if met {
+			e.finishStep(StopCondition)
+			break
 		}
 		if e.takeBreak() {
 			break
 		}
-		e.beginFrame()
+		e.frameBoundary()
+		if e.stepCond != nil && !e.stepCondInstr && e.stepCond() {
+			e.finishStep(StopCondition)
+			break
+		}
 	}
 	e.updateStatus()
 }
@@ -200,6 +232,7 @@ func (e *Emulator) publishFrame() {
 func (e *Emulator) handle(c command) {
 	switch v := c.(type) {
 	case cmdLoadMachine:
+		e.cancelPending()
 		e.saveSymbols()
 		e.storeOverlay()
 		e.closeBattery()
@@ -218,18 +251,25 @@ func (e *Emulator) handle(c command) {
 			e.audio.start()
 		}
 		e.setLoaded(v.name)
-		e.attachDebugger(v.machine)
+		e.attachDebugger(v.machine, v.path)
 		e.powerOnCycles = v.machine.Cycles()
 		e.hasFrame = false
 		e.resetRewind()
 		e.stopPlayback("")
 		e.recorder = nil
 		e.setMovieStatus()
+		// 常時記録を電源投入から始める。
+		e.startJournal(movie.StartPowerOn)
 		// 最初のフレームの入力をラッチする。
-		e.beginFrame()
+		e.framePending = false
+		e.frameBoundary()
+		if o := e.observer.Load(); o != nil && o.OnLoad != nil {
+			o.OnLoad(v.name)
+		}
 		v.done <- nil
 
 	case cmdUnload:
+		e.cancelPending()
 		e.saveSymbols()
 		e.storeOverlay()
 		e.dbg.Attach(nil, nil)
@@ -250,9 +290,16 @@ func (e *Emulator) handle(c command) {
 		v.done <- nil
 
 	case cmdReset:
+		e.cancelPending()
 		if e.machine == nil {
 			v.done <- errNoROM
 			break
+		}
+		if e.journal.rec != nil {
+			e.journal.rec.MarkReset(v.hard)
+		}
+		if e.recorder != nil {
+			e.recorder.MarkReset(v.hard)
 		}
 		if v.hard {
 			init, err := e.initState()
@@ -276,6 +323,9 @@ func (e *Emulator) handle(c command) {
 	case cmdSetInput:
 		e.Input.Set(v.port, v.buttons)
 
+	case cmdAgentInput:
+		e.setAgentInput(v.on)
+
 	case cmdSetSpeed:
 		if v.factor > 0 {
 			e.speed = v.factor
@@ -293,6 +343,11 @@ func (e *Emulator) handle(c command) {
 		e.setMuted(v.muted)
 
 	case cmdPause:
+		if v.paused {
+			// 結果を待たれている進行を打ち切る。GUI の操作（待つ者が
+			// いない進行）では止める条件を残し、再開で続きを走らせる。
+			e.cancelPending()
+		}
 		e.paused = v.paused
 		if !v.paused {
 			e.pacer.Reset()
@@ -316,6 +371,7 @@ func (e *Emulator) handle(c command) {
 		}
 
 	case cmdLoadState:
+		e.cancelPending()
 		if e.machine == nil {
 			v.done <- errNoROM
 			break
@@ -323,6 +379,7 @@ func (e *Emulator) handle(c command) {
 		err := e.machine.LoadState(v.data)
 		e.afterLoadState()
 		if err == nil {
+			e.dbg.StateLoaded()
 			// ステートのロードで記録を止める。ロードの前後で
 			// フレームの並びが続かないためである（設計書 08 編 §8.7.5）。
 			if rerr := e.stopRecording(); rerr != nil {
@@ -330,7 +387,10 @@ func (e *Emulator) handle(c command) {
 			}
 			e.stopPlayback("")
 			e.resetRewind()
-			e.beginFrame()
+			// 常時記録を読み込んだ状態から始め直す。
+			e.startJournal(movie.StartSaveState)
+			e.framePending = false
+			e.frameBoundary()
 		}
 		e.updateStatus()
 		v.done <- err
@@ -356,6 +416,10 @@ func (e *Emulator) handle(c command) {
 		e.stopPlayback("")
 		v.done <- err
 
+	case cmdReplay:
+		e.cancelPending()
+		v.done <- e.startReplay(v.m)
+
 	case cmdFunc:
 		if v.fn != nil {
 			v.fn(e.machine)
@@ -370,7 +434,8 @@ func (e *Emulator) setLoaded(name string) {
 	e.statusMu.Lock()
 	defer e.statusMu.Unlock()
 	e.status.Loaded = true
-	e.status.Paused = false
+	// StartPaused のときは一時停止した状態で読み込む。表示をそれに合わせる。
+	e.status.Paused = e.paused
 	e.status.ROMName = name
 	e.status.ROMKey = cart.ROMKeyString(e.machine.ROM.Hash[:])
 	e.status.MapperName = info.MapperName
@@ -498,4 +563,26 @@ func (e *Emulator) SaveScreenshot(path string) error {
 		return errors.New("emu: エミュレーションが停止している")
 	}
 	return err
+}
+
+// FramePNG は直前に完成したフレームを scale 倍（最近傍法）の PNG にする。
+// フレームがまだ無いとき ok は false。
+//
+// Agent Interface の Observation が使う（設計書 14 編 §14.9.3）。補間で
+// 拡大すると 8×8 のタイルの境界がぼけ、画像から読み取れなくなるため、
+// 最近傍法で拡大する。オーバースキャンで隠さず全体を返す。
+func (e *Emulator) FramePNG(scale int) (data []byte, ok bool, err error) {
+	scale = max(1, min(scale, 4))
+	alive := e.WithMachine(func(m *nes.NES) {
+		if m == nil || !e.hasFrame {
+			return
+		}
+		ok = true
+		src := video.Image(e.lastFrame, video.DefaultPalette(), video.Overscan{}, m.Region.PictureHeight)
+		data, err = video.EncodeImagePNG(video.ScaleNearest(src, scale))
+	})
+	if !alive {
+		return nil, false, errors.New("emu: エミュレーションが停止している")
+	}
+	return data, ok, err
 }

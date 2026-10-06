@@ -64,8 +64,9 @@ func (p *PPU) writeVRAM(addr uint16, v uint8) {
 	case addr < 0x3F00:
 		p.writeNametable(addr&0x2FFF, v)
 	default:
-		if p.Warn != nil && v&0x3F == forbiddenColor {
+		if (p.Warn != nil || p.Compat != nil) && v&0x3F == forbiddenColor {
 			p.warn("色 $0D をパレット $%04X へ書いた", addr)
+			p.compat(CompatColor0D, addr)
 		}
 		p.palette[paletteIndex(addr)] = v & 0x3F
 	}

@@ -37,6 +37,8 @@ type statusBar struct {
 	// message は一時的に表示する知らせ。
 	message   string
 	messageAt time.Time
+	// agentNote は AI の接続の表示（「AI 接続中（2）」）。
+	agentNote string
 }
 
 // newStatusBar はステータスバーを作る。
@@ -46,6 +48,9 @@ func newStatusBar(frames *emu.FrameBuffer) *statusBar {
 		frames: frames,
 		lastAt: time.Now(),
 	}
+	// 収まらない分は省略する。省略しないとラベルの最小幅が文字列の幅になり、
+	// 「実行中」と「一時停止」のように文字数が変わるたびにウィンドウの幅が変わる。
+	b.label.Truncation = fyne.TextTruncateEllipsis
 	return b
 }
 
@@ -119,6 +124,7 @@ func (b *statusBar) text(s emu.Status) string {
 	if b.dropped > 0 {
 		fmt.Fprintf(&sb, i18n.T(i18n.StatusDropped), b.dropped)
 	}
+	sb.WriteString(b.agentNote)
 	if b.message != "" {
 		if time.Since(b.messageAt) > messageDuration {
 			b.message = ""

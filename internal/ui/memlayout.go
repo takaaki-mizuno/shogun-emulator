@@ -39,7 +39,9 @@ func (l memLayout) prefixLen() int { return 1 + l.digits + 3 }
 func (l memLayout) byteColumn(i int) int { return l.prefixLen() + i*3 + i/8 }
 
 // asciiColumn は文字表示の先頭の桁。
-func (l memLayout) asciiColumn() int { return l.byteColumn(l.perRow) + 1 }
+//
+// 最後のバイトの 16 進 2 桁と、続く空白 2 つの後ろにある。
+func (l memLayout) asciiColumn() int { return l.byteColumn(l.perRow-1) + 4 }
 
 // hit は表示行 row・桁 col にあるバイトのオフセットと上位の桁かを返す。
 func (l memLayout) hit(row, col int) (offset int, high, ok bool) {

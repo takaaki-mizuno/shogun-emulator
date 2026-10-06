@@ -10,6 +10,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
@@ -102,8 +103,12 @@ func (v *cpuViewer) Content() fyne.CanvasObject {
 	v.pos = widget.NewLabel("")
 	v.irq = widget.NewLabel("")
 	v.stack = widget.NewLabel("")
-	v.stack.Wrapping = fyne.TextWrapWord
 	v.calls = widget.NewLabel("")
+	// 右側の幅は sideLayout が決める。折り返さないと、ラベルの最小幅が
+	// 文字列の幅になり、値が変わるたびに右側の幅と逆アセンブルの位置が変わる。
+	for _, l := range []*widget.Label{v.flags, v.pos, v.irq, v.stack, v.calls} {
+		l.Wrapping = fyne.TextWrapWord
+	}
 
 	e := v.u.emu
 	buttons := container.NewGridWithColumns(5,
@@ -129,12 +134,44 @@ func (v *cpuViewer) Content() fyne.CanvasObject {
 		widget.NewLabelWithStyle(i18n.T(i18n.CPUCallStack), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		v.calls,
 	)
+	sideBox := container.New(&sideLayout{width: cpuSideWidth(regForm)}, container.NewVScroll(side))
 	top := container.NewBorder(nil, container.NewVBox(v.cursorLbl, buttons), nil,
-		container.NewVScroll(side), v.grid)
+		sideBox, v.grid)
 	split := container.NewVSplit(top, v.panel.root)
 	split.Offset = 0.7
 	v.Refresh()
 	return split
+}
+
+// cpuSideWidthSample は右側の幅を決めるための見本の行。位置の表示の
+// 2 行目で、値が大きいときの長さにする。
+const cpuSideWidthSample = "フレーム: 9999999  スキャンライン: 261  ドット: 340"
+
+// cpuSideWidth は右側の固定の幅を返す。レジスタの欄と見本の行の広い方とする。
+func cpuSideWidth(regForm fyne.CanvasObject) float32 {
+	sample := fyne.MeasureText(cpuSideWidthSample, theme.TextSize(), fyne.TextStyle{}).Width +
+		2*theme.InnerPadding() + theme.ScrollBarSize()
+	return max(regForm.MinSize().Width, sample)
+}
+
+// sideLayout は中身を固定の幅で置く。高さは中身に従う。
+type sideLayout struct{ width float32 }
+
+// MinSize は固定の幅と中身の高さを返す。
+func (l *sideLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	var h float32
+	for _, o := range objects {
+		h = max(h, o.MinSize().Height)
+	}
+	return fyne.NewSize(l.width, h)
+}
+
+// Layout は中身を全体に広げる。
+func (l *sideLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	for _, o := range objects {
+		o.Move(fyne.NewPos(0, 0))
+		o.Resize(size)
+	}
 }
 
 // Refresh はエミュレーションゴルーチンから表示内容を受け取って描き直す。
@@ -319,11 +356,11 @@ func (v *cpuViewer) setRegister(r debug.Register, s string) {
 		v.u.showError(err)
 		return
 	}
-	v.u.emu.WithDebugger(func(d *debug.Debugger) {
-		if d.Machine() != nil {
-			d.SetRegister(r, val)
-		}
-	})
+	// 常時記録に介入として残すため、エミュレータを通して書く（設計書 14 編
+	// §14.16.2）。ムービーの記録中と再生中は断る（設計書 09 編 §9.4.8）。
+	if err := v.u.emu.SetRegister(r, val); err != nil {
+		v.u.showError(err)
+	}
 	v.Refresh()
 }
 

@@ -32,6 +32,14 @@ func (e *Emulator) StopRecordingMovie() error {
 // ファイルの読み込みと解析を呼び出し側のゴルーチンで行う。実行中の
 // エミュレーションを止めないためである。
 func (e *Emulator) PlayMovieFile(path string) error {
+	// Repro のディレクトリ（<名前>.repro）を渡されたら中の repro.shgm を使う。
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		p := filepath.Join(path, "repro.shgm")
+		if _, err := os.Stat(p); err != nil {
+			return errReproDir
+		}
+		path = p
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -157,6 +165,7 @@ func (e *Emulator) startPlayback(m *movie.Movie) error {
 		if err := e.machine.LoadState(m.Header.StateBlob); err != nil {
 			return fmt.Errorf("emu: ムービーに埋め込まれたステートを復元できない: %w", err)
 		}
+		e.dbg.StateLoaded()
 	}
 	e.afterLoadState()
 	e.resetRewind()
@@ -165,10 +174,23 @@ func (e *Emulator) startPlayback(m *movie.Movie) error {
 	e.desyncMu.Unlock()
 
 	e.player = p
-	e.paused = false
-	e.setPaused(false)
+	// 常時記録を再生するムービーと同じ始まりから記録し直す。
+	if m.Header.Start == movie.StartSaveState {
+		e.startJournal(movie.StartSaveState)
+	} else {
+		e.startJournal(movie.StartPowerOn)
+	}
+	e.journal.pauseAtEnd = m.Header.Author == ReproAuthor
+	e.journal.replaying = false
+	// Agent-Paced の Instance はエージェントの進行の要求の間だけ進む
+	// （設計書 14 編 §14.4.2）。再生を始めても走り出さない。
+	e.paused = e.agentInput != nil
+	e.setPaused(e.paused)
 	e.hasFrame = false
-	e.beginFrame()
+	e.framePending = false
+	e.frameBoundary()
+	// フレームの開始の処理を遅らせたときも、再生中であることを見せる。
+	e.setMovieStatus()
 	e.updateStatus()
 	return nil
 }

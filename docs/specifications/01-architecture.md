@@ -1,7 +1,8 @@
 # 01 全体アーキテクチャ設計
 
-- 文書バージョン: 1.0
+- 文書バージョン: 1.1
 - 作成日: 2026-09-21
+- 更新日: 2026-10-04（Agent Interface の追加に伴い §1.3・§1.4・§1.5・§1.10 を更新）
 - 対象システム: Shogun Emulator（将軍エミュレータ）
 
 ---
@@ -55,6 +56,10 @@ internal/video/          フレームバッファ、パレット適用、拡大
 internal/ui/             GUI。Fyne への依存をここに閉じる
 internal/config/         設定ファイル、キーバインド、パス解決
 internal/testrom/        テスト ROM ランナー
+internal/agent/          Agent Interface。Host、Instance、Control、Agent Command の登録簿、Observation、イベント、常時記録
+    rpc/                 JSON-RPC 2.0 のサーバとクライアント、接続先の発見、トークン
+    mcpbridge/           MCP ブリッジ。MCP SDK への依存をここに閉じる
+    scenario/            Scenario の読み込み・実行・JUnit XML 出力
 assets/                  アイコン、既定パレット
 tools/spikes/            技術検証コード（独立モジュール）
 ```
@@ -88,6 +93,41 @@ graph TD
     NES --> VID
 ```
 
+Agent Interface のパッケージは次の向きに依存する。上の図の `UI` と `EMU`・`DBG` の間に置く形になる。
+
+```mermaid
+graph TD
+    CMD["cmd/shogun"]
+    UI["internal/ui"]
+    MCP["internal/agent/mcpbridge<br/>MCP SDK"]
+    SCN["internal/agent/scenario"]
+    RPC["internal/agent/rpc"]
+    AG["internal/agent"]
+    EMU["internal/emu"]
+    DBG["internal/debug"]
+
+    CMD --> UI
+    CMD --> MCP
+    CMD --> SCN
+    CMD --> RPC
+    UI --> AG
+    UI --> RPC
+    MCP --> RPC
+    SCN --> RPC
+    RPC --> AG
+    AG --> EMU
+    AG --> DBG
+```
+
+| 規則 | 理由 |
+|---|---|
+| `internal/agent` 以下は `internal/ui` を参照しない | GUI なしで動く headless と同じコードを使うため |
+| `internal/agent/mcpbridge` は `internal/agent` を直接参照せず、`internal/agent/rpc` のクライアントだけを使う | MCP の経路が JSON-RPC を迂回しないため |
+| MCP SDK（`github.com/modelcontextprotocol/go-sdk`）を参照するのは `internal/agent/mcpbridge` だけ | SDK の更新の影響を 1 パッケージに閉じる |
+| `internal/nes` は Agent Interface のために変更しない | 必要な観測は `Hooks` で行う。コアの分離を保つ |
+
+詳細は「14 Agent Interface 設計」§14.2.2。これらの規則も `internal/arch` の静的検査で強制する（「12 テスト設計」§12.7）。
+
 `internal/nes` が依存するのは Go 標準ライブラリと `internal/nes/state`・`internal/video` のみである。これにより、コアをテストするときに GUI とオーディオデバイスを必要としない。
 
 `internal/video` はフレームバッファの型とその表示への変換だけを持つ葉のパッケージであり、`internal/` 以下のどのパッケージも参照しない。PPU が書き、表示側が読む受け渡しの場であるため、どちらの側にも依存させない。パレット値から RGB への変換はエンファシスを赤・緑・青の順に並んだ 3 bit として受け取る。PPU が `region.Region` の並びからこの順へ正規化して `Frame` へ書くため、`internal/video` は `internal/nes/region` を参照しない。
@@ -103,6 +143,16 @@ graph TD
 | メインゴルーチン（Fyne の UI スレッド） | ウィンドウ、描画、入力イベント | UI オブジェクト、共有スナップショット（読み） |
 | エミュレーションゴルーチン | CPU・PPU・APU・マッパーの実行 | エミュレーション状態（単独）、リングバッファ（書き）、フレームバッファ（書き） |
 | oto の再生スレッド | オーディオ出力 | リングバッファ（読み） |
+
+Agent Interface（「14 Agent Interface 設計」）を有効にしたとき、次の主体が加わる。
+
+| 主体 | 担当 | 触るもの |
+|---|---|---|
+| 受け付けゴルーチン（Transport ごとに 1 本） | ローカルソケットで接続を受け付ける | 接続の一覧 |
+| 接続ゴルーチン（接続ごとに 1 本） | 要求を読み、Agent Command を実行し、応答を書く | コマンドキューへの送信、`WithMachine` による読み出し |
+| 各 Instance のエミュレーションゴルーチン | headless の Host は複数の Instance を持ち、Instance ごとにエミュレーションゴルーチンを 1 本持つ | その Instance のエミュレーション状態（単独） |
+
+接続ゴルーチンはエミュレーション状態に直接触れない。Instance ごとのコマンドキューと `WithMachine` を通す。Instance どうしはエミュレーション状態を共有しない（Fork は `SaveState` と `LoadState` による複製で行う）。共有するのは ROM ごとの Symbol と Game State Definition だけであり、これらはロックで守る。
 
 **エミュレーション状態を触るのはエミュレーションゴルーチンだけである。** 他の主体は共有スナップショットとリングバッファ経由でのみ関わる。これにより、エミュレーション結果がゴルーチンのスケジューリングに依存しない。
 
@@ -196,3 +246,4 @@ graph LR
 | 11 設定と CLI 設計 | 設定ファイル、パス解決、コマンドライン |
 | 12 テスト設計 | テスト ROM ランナー、往復テスト、決定論テスト |
 | 13 ビルドと配布設計 | ビルド、アイコン、パッケージング |
+| 14 Agent Interface 設計 | AI エージェントからの操作・観測・デバッグ。Transport、Instance、Observation、Symbol、Game State、Scenario、Diagnostic |

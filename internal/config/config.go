@@ -18,6 +18,7 @@ type Config struct {
 	State     StateConfig     `json:"state"`
 	Movie     MovieConfig     `json:"movie"`
 	UI        UIConfig        `json:"ui"`
+	Agent     AgentConfig     `json:"agent"`
 
 	// noSave は新しいバージョンの設定ファイルを読んだため保存しないことを表す。
 	noSave bool
@@ -125,6 +126,21 @@ type UIConfig struct {
 	RecentROMs []RecentROM `json:"recentRoms"`
 }
 
+// AgentConfig は Agent Interface の設定（設計書 14 編 §14.23）。
+type AgentConfig struct {
+	// Enabled は GUI 版で Agent Interface を有効にすることを表す。
+	// headless のサブコマンドはこの値によらず有効である。
+	Enabled bool `json:"enabled"`
+	// Listen は接続方式。unix、または tcp:127.0.0.1:PORT・tcp:[::1]:PORT。
+	Listen string `json:"listen"`
+	// MaxInstances は headless の Instance の上限。
+	MaxInstances int `json:"maxInstances"`
+	// RomWatchAction は GUI 版で ROM ファイルの変化を見つけたときの動作。
+	RomWatchAction string `json:"romWatchAction"`
+	// ObserveImageScale は Observation の画像の既定の拡大率。
+	ObserveImageScale int `json:"observeImageScale"`
+}
+
 // WindowState はウィンドウのサイズと表示状態。
 //
 // 位置は持たない。Fyne はウィンドウの位置を取得・設定する手段を持たない。
@@ -181,6 +197,10 @@ const (
 	ThemeDark  = "dark"
 
 	LanguageJapanese = "ja"
+
+	AgentListenUnix = "unix"
+	RomWatchNotify  = "notify"
+	RomWatchReload  = "reload"
 )
 
 // 拡大率の範囲。
@@ -191,6 +211,16 @@ const (
 
 // MaxOverscan は上下左右それぞれで隠せる最大のピクセル数。
 const MaxOverscan = 16
+
+// ApplyDeterministic は値が定まらない状態をすべて固定値にする（引数
+// --deterministic、設計書 08 編 §8.5.2）。
+func ApplyDeterministic(e *EmulationConfig) {
+	e.RAMInitPattern = "zero"
+	e.RAMSeed = 0
+	e.CPUPPUAlignment = 0
+	e.DMAGetPutPhase = 0
+	e.PPUVBlankFlag = false
+}
 
 // Default は既定の設定を返す。
 //
@@ -256,6 +286,12 @@ func Default() *Config {
 			Theme:        ThemeAuto,
 			Windows:      map[string]WindowState{},
 			RecentROMs:   []RecentROM{},
+		},
+		Agent: AgentConfig{
+			Listen:            AgentListenUnix,
+			MaxInstances:      16,
+			RomWatchAction:    RomWatchNotify,
+			ObserveImageScale: 2,
 		},
 	}
 }

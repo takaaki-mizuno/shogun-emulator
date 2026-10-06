@@ -29,6 +29,9 @@ const logFileName = "shogun.log"
 // main から分けてあるのは、終了コードと出力をテストから確かめられるように
 // するためである。
 func run(args []string, stdout, stderr io.Writer) int {
+	if isSubcommand(args) {
+		return runSubcommand(args, stdout, stderr)
+	}
 	opts, code, ok := parseArgs(args, stderr)
 	if !ok {
 		return code

@@ -54,6 +54,10 @@ type options struct {
 	traceLog      string
 	breakAt       string
 
+	// AI
+	agent       bool
+	agentListen string
+
 	// headless 実行
 	headless   bool
 	frames     int
@@ -71,6 +75,7 @@ var flagGroups = []struct {
 	{"ステートとムービー", []string{"load-state", "save-state-on-exit", "movie", "record-movie", "movie-verify", "no-movie-verify"}},
 	{"決定論", []string{"ram-init", "ram-seed", "deterministic"}},
 	{"デバッグ", []string{"debug", "log", "log-dir", "log-categories", "trace-log", "break-at"}},
+	{"AI", []string{"agent", "agent-listen"}},
 	{"headless", []string{"headless", "frames", "screenshot"}},
 }
 
@@ -111,6 +116,8 @@ func parseArgs(args []string, stderr io.Writer) (options, int, bool) {
 	fs.StringVar(&opts.logCategories, "log-categories", "", "ログカテゴリ（カンマ区切り）")
 	fs.StringVar(&opts.traceLog, "trace-log", "", "CPU トレースをこのファイルへ出力する")
 	fs.StringVar(&opts.breakAt, "break-at", "", "起動時に実行ブレークポイントを置くアドレス（16 進）")
+	fs.BoolVar(&opts.agent, "agent", false, "AI からの接続を許可する（Agent Interface を有効にする）")
+	fs.StringVar(&opts.agentListen, "agent-listen", "", "AI からの接続の待ち受け先（unix、tcp:127.0.0.1:PORT）")
 	fs.BoolVar(&opts.headless, "headless", false, "GUI を起動せずに実行する")
 	fs.IntVar(&opts.frames, "frames", 0, "指定したフレーム数だけ実行して終了する")
 	fs.StringVar(&opts.screenshot, "screenshot", "", "終了時にスクリーンショットを PNG で保存する")
@@ -155,6 +162,12 @@ func printUsage(fs *flag.FlagSet, w io.Writer) {
 			fmt.Fprintf(w, "%-28s %s\n", head, usage)
 		}
 	}
+	fmt.Fprintf(w, "\nAI 向けのサブコマンド（%s <サブコマンド> --help で詳細）:\n", appName)
+	fmt.Fprintf(w, "  %-26s %s\n", "serve [--listen ADDR]", "headless で JSON-RPC の待ち受けを始める")
+	fmt.Fprintf(w, "  %-26s %s\n", "ctl <名前空間> <操作>", "起動中のエミュレータへ Agent Command を 1 つ送る")
+	fmt.Fprintf(w, "  %-26s %s\n", "mcp [--attach [PID]]", "MCP の stdio サーバ（Claude Code などに登録する）")
+	fmt.Fprintf(w, "  %-26s %s\n", "run <Scenario...>", "Scenario を headless で実行する（--junit PATH、--update-golden）")
+	fmt.Fprintf(w, "同じ名前の ROM を開くときは ./serve のようにパスで渡す。\n")
 }
 
 // optionOverrides は引数による設定の上書きを作る。受け付けられない値はエラーにする。
@@ -215,13 +228,16 @@ func optionOverrides(opts options) ([]config.Override, []string, error) {
 	}
 	if opts.deterministic {
 		// 値が定まらない状態をすべて固定値にする（設計書 08 編 §8.5.2）。
-		add("--deterministic", func(c *config.Config) {
-			c.Emulation.RAMInitPattern = state.PatternZero.String()
-			c.Emulation.RAMSeed = 0
-			c.Emulation.CPUPPUAlignment = 0
-			c.Emulation.DMAGetPutPhase = 0
-			c.Emulation.PPUVBlankFlag = false
-		})
+		add("--deterministic", func(c *config.Config) { config.ApplyDeterministic(&c.Emulation) })
+	}
+	if opts.agent {
+		add("--agent", func(c *config.Config) { c.Agent.Enabled = true })
+	}
+	if opts.agentListen != "" {
+		if !config.ValidAgentListen(opts.agentListen) {
+			return nil, nil, fmt.Errorf("--agent-listen %q は使えない（unix、tcp:127.0.0.1:PORT、tcp:[::1]:PORT）", opts.agentListen)
+		}
+		add("--agent-listen", func(c *config.Config) { c.Agent.Listen = opts.agentListen })
 	}
 	if opts.movieVerify && opts.noMovieVerify {
 		return nil, nil, fmt.Errorf("--movie-verify と --no-movie-verify は同時に指定できない")

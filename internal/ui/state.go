@@ -121,7 +121,8 @@ func (u *UI) startRecordingMovie() {
 func (u *UI) playMovie() {
 	path, err := zenity.SelectFile(
 		zenity.Title(i18n.T(i18n.DialogPlayMovie)),
-		zenity.FileFilter{Name: i18n.T(i18n.SetPathMovie), Patterns: []string{"*.movie"}},
+		// Repro の repro.shgm も選べるようにする（設計書 14 編 §14.16.3）。
+		zenity.FileFilter{Name: i18n.T(i18n.SetPathMovie), Patterns: []string{"*.movie", "*.shgm"}},
 	)
 	if !u.dialogPath(path, err) {
 		return

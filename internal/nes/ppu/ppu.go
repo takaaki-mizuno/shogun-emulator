@@ -107,7 +107,34 @@ type PPU struct {
 
 	// Warn は互換性に関わる事象を記録する。nil のとき記録しない。
 	Warn func(format string, args ...any)
+	// Compat は Warn と同じ判定の結果を構造化して知らせる（Agent Interface の
+	// Diagnostic）。nil のとき知らせない。reg はレジスタのアドレス（$2000–$2007）
+	// かパレットのアドレス。
+	Compat func(kind Compat, reg uint16)
 }
+
+// Compat は PPU が知らせる互換性の事象の種類。
+type Compat uint8
+
+// 互換性の事象。
+const (
+	// CompatRenderAccess は描画中の $2006 への書き込みか $2007 の読み書き。
+	CompatRenderAccess Compat = iota + 1
+	// CompatWarmupWrite は起動直後の、書き込みを受け付けない期間の書き込み。
+	CompatWarmupWrite
+	// CompatColor0D は色 $0D のパレットへの書き込み。
+	CompatColor0D
+)
+
+// compat は Compat へ知らせる。
+func (p *PPU) compat(kind Compat, reg uint16) {
+	if p.Compat != nil {
+		p.Compat(kind, reg)
+	}
+}
+
+// OAMAddr は OAMADDR（$2003）の値を返す。
+func (p *PPU) OAMAddr() uint8 { return p.oamAddr }
 
 // warn は互換性に関わる事象を記録する。
 func (p *PPU) warn(format string, args ...any) {

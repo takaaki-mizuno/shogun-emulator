@@ -84,6 +84,9 @@ type CPU struct {
 	indexBase    uint16
 	indexCrossed bool
 
+	// dummy はダミーリードの最中であることを表す。セーブステートに含めない。
+	dummy bool
+
 	// opPC は実行中の命令の opcode が置かれたアドレス。
 	// 互換性の記録とデバッガの表示に使う。
 	opPC uint16
@@ -96,6 +99,10 @@ type CPU struct {
 
 	// Warn は互換性に関わる事象を記録する。nil のとき記録しない。
 	Warn func(format string, args ...any)
+	// Compat は Warn と同じ判定の結果を構造化して知らせる（Agent Interface の
+	// Diagnostic）。nil のとき知らせない。判定は 1 か所で行い、ログと
+	// Diagnostic の両方へ渡す（設計書 09 編 §9.8）。
+	Compat func(kind Compat, pc uint16)
 
 	// OnInterrupt は割り込みシーケンスを終えたときに呼ばれる。nil の
 	// とき呼ばない。デバッガのイベントブレークポイントが使う。
@@ -113,6 +120,21 @@ func (c *CPU) Cycles() uint64 { return c.bus.Cycles() }
 // Halted は STP によって停止しているかを返す。
 func (c *CPU) Halted() bool { return c.halted }
 
+// OpPC は実行中（または直前に実行した）命令の opcode のアドレスを返す。
+// バスアクセスのフックから、そのアクセスを起こした命令を知るために使う。
+func (c *CPU) OpPC() uint16 { return c.opPC }
+
+// Compat は CPU が知らせる互換性の事象の種類。
+type Compat uint8
+
+// 互換性の事象。
+const (
+	// CompatUnstable は不安定な非公式命令の実行。
+	CompatUnstable Compat = iota + 1
+	// CompatSTP は STP の実行。
+	CompatSTP
+)
+
 // read は 1 サイクル消費して読み、割り込み線を採取する。
 //
 // すべてのバスアクセスをここに通す。1 サイクルごとに NMI の立ち下がりを
@@ -122,6 +144,19 @@ func (c *CPU) read(addr uint16) uint8 {
 	c.endCycle()
 	return v
 }
+
+// dummyRead は値を使わない読み出し（ダミーリード）を行う。バスへの効果は
+// read と同じであり、デバッガのフックが DummyRead で見分けられるように
+// 印を付けるだけである。
+func (c *CPU) dummyRead(addr uint16) {
+	c.dummy = true
+	c.read(addr)
+	c.dummy = false
+}
+
+// DummyRead は今のバスの読み出しがダミーリードかを返す。読み出しのフックから
+// 呼ぶ（Diagnostic の uninitialized_ram_read はダミーリードを数えない）。
+func (c *CPU) DummyRead() bool { return c.dummy }
 
 // write は 1 サイクル消費して書き、割り込み線を採取する。
 //
@@ -211,7 +246,7 @@ func (c *CPU) pull() uint8 {
 //
 // PLA・PLP・RTS・RTI は取り出しの前に 1 サイクル分のスタックアクセスを行う。
 func (c *CPU) peekStack() {
-	c.read(stackBase | uint16(c.S))
+	c.dummyRead(stackBase | uint16(c.S))
 }
 
 // PowerOn は電源投入時の状態にする。

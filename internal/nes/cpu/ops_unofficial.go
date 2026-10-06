@@ -228,6 +228,9 @@ func (c *CPU) unstableStore(addr uint16, reg uint8) {
 func opSTP(c *CPU, _ uint16) {
 	c.halted = true
 	c.warn("STP により CPU が停止した（PC=$%04X）", c.opPC)
+	if c.Compat != nil {
+		c.Compat(CompatSTP, c.opPC)
+	}
 }
 
 // warnUnstable は不安定な非公式命令の実行を記録する。
@@ -236,4 +239,7 @@ func opSTP(c *CPU, _ uint16) {
 // 手がかりになる。黙って実行すると後から追えなくなる。
 func (c *CPU) warnUnstable(name string) {
 	c.warn("不安定な非公式命令 %s を実行した（PC=$%04X）", name, c.opPC)
+	if c.Compat != nil {
+		c.Compat(CompatUnstable, c.opPC)
+	}
 }

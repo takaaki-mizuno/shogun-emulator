@@ -35,6 +35,8 @@ var envSettings = []envSetting{
 	{"LOG_DIR", func(c *Config, v string) error { c.Paths.LogDir = v; return nil }},
 	{"MOVIE_DIR", func(c *Config, v string) error { c.Paths.MovieDir = v; return nil }},
 	{"LOG", func(c *Config, v string) error { c.Debug.LogOutput = v; return nil }},
+	{"AGENT", func(c *Config, v string) error { return setBool(&c.Agent.Enabled, v) }},
+	{"AGENT_LISTEN", func(c *Config, v string) error { c.Agent.Listen = v; return nil }},
 	{"LOG_CATEGORIES", func(c *Config, v string) error {
 		c.Debug.LogCategories = splitList(v)
 		return nil

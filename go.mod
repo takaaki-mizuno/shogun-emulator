@@ -5,6 +5,8 @@ go 1.25.0
 require (
 	fyne.io/fyne/v2 v2.8.1
 	github.com/ebitengine/oto/v3 v3.5.1
+	github.com/goccy/go-yaml v1.19.2
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ncruces/zenity v0.10.15
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
@@ -30,6 +32,7 @@ require (
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
@@ -42,12 +45,18 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

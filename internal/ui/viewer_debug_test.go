@@ -215,8 +215,8 @@ func TestMemoryViewerEditsByTyping(t *testing.T) {
 	v.setLabel("score")
 	v.addWatch()
 	sym := u.emu.Debugger().Symbols()
-	if sym.Label(0x0400) != "score" {
-		t.Errorf("名前 = %q, 期待 score", sym.Label(0x0400))
+	if sym.LabelAt(0x0400, nil) != "score" {
+		t.Errorf("名前 = %q, 期待 score", sym.LabelAt(0x0400, nil))
 	}
 	if w := sym.Watch(); len(w) != 1 || w[0] != 0x0400 {
 		t.Errorf("ウォッチ = %v", w)

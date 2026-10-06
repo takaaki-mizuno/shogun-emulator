@@ -127,8 +127,8 @@ func (c *CPU) resolveVector(kind interruptKind) uint16 {
 // シーケンス自体はポーリングを行わない。割り込みハンドラの最初の 1 命令は
 // 必ず実行される。
 func (c *CPU) serviceInterrupt(kind interruptKind) {
-	c.read(c.PC) // 1: opcode をフェッチして破棄
-	c.read(c.PC) // 2: 同じアドレスを読んで破棄
+	c.dummyRead(c.PC) // 1: opcode をフェッチして破棄
+	c.dummyRead(c.PC) // 2: 同じアドレスを読んで破棄
 
 	c.push(uint8(c.PC >> 8)) // 3
 	c.push(uint8(c.PC))      // 4

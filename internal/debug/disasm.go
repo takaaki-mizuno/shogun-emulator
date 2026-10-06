@@ -129,7 +129,7 @@ func (d *Disassembler) Listing(peek Peeker, offset Offsetter, anchor uint16, cou
 
 // line は addr の 1 行を作る。
 func (d *Disassembler) line(peek Peeker, offset Offsetter, addr uint16, x, y uint8) Line {
-	l := Line{Addr: addr, Label: d.symbols.Label(addr)}
+	l := Line{Addr: addr, Label: d.symbols.LabelAt(addr, offset)}
 	if off, ok := offset(addr); ok && d.symbols.IsData(off) {
 		l.Data = true
 		l.Bytes = []uint8{peek(addr)}
@@ -144,12 +144,12 @@ func (d *Disassembler) line(peek Peeker, offset Offsetter, addr uint16, x, y uin
 	for i := range info.Length {
 		l.Bytes[i] = peek(addr + uint16(i))
 	}
-	l.Operand, l.Comment = d.operand(peek, info, addr, x, y)
+	l.Operand, l.Comment = d.operand(peek, offset, info, addr, x, y)
 	return l
 }
 
 // operand はオペランドの表記と注記を返す。
-func (d *Disassembler) operand(peek Peeker, info cpu.OpcodeInfo, pc uint16, x, y uint8) (string, string) {
+func (d *Disassembler) operand(peek Peeker, offset Offsetter, info cpu.OpcodeInfo, pc uint16, x, y uint8) (string, string) {
 	b1 := peek(pc + 1)
 	b2 := uint16(peek(pc+2))<<8 | uint16(b1)
 	// value は実効アドレスの現在の値を注記する。
@@ -160,7 +160,7 @@ func (d *Disassembler) operand(peek Peeker, info cpu.OpcodeInfo, pc uint16, x, y
 		return fmt.Sprintf("= $%04X = #$%02X", ea, peek(ea))
 	}
 	name := func(addr uint16, text string) string {
-		if l := d.symbols.Label(addr); l != "" {
+		if l := d.symbols.LabelAt(addr, offset); l != "" {
 			return l
 		}
 		return text

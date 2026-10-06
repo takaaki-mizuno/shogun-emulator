@@ -44,6 +44,16 @@ func attachFullDebugger(t *testing.T, n *nes.NES) *debug.Debugger {
 	d.AcquireSnapshots(-1)
 	d.AcquireSnapshots(100)
 	d.AcquireSnapshots(200)
+	// Agent Interface の PPU 書き込みの記録（設計書 14 編 §14.10.5）を有効に
+	// する。要求の無いまま 600 フレームたつと外れるため、最初の 600 フレームの
+	// 間だけ効く。観測だけを行い結果を変えないことを確かめる。Freeze は値を
+	// 書き換えるため含めない（設計書 12 編 §12.8.3）。
+	d.RequestPPUWrites()
+	// Agent Interface の解析（設計書 14 編 §14.18–§14.20）: Diagnostic の全項目、
+	// バスアクセスつきのトレース、プロファイル。止めない指定で観測だけを行う。
+	d.SetDiagConfig(allDiagnostics())
+	d.SetAgentTrace(debug.AgentTrace{Enabled: true, RingSize: 1 << 16, BusRingSize: 1 << 17})
+	d.StartProfile(debug.ProfileOptions{})
 	// APU 状態ビューアでミュートした状態にする。出力段だけに効く。
 	n.APU.SetMute(0x1F)
 	return d
@@ -75,6 +85,9 @@ func TestMovieUnchangedByDebugger(t *testing.T) {
 			}
 			if d.Tracer().Count() == 0 {
 				t.Error("トレースが記録されていない")
+			}
+			if rep, ok := d.ProfileReport(); !ok || rep.Frames == 0 {
+				t.Error("プロファイルが測られていない")
 			}
 		})
 	}
@@ -213,4 +226,13 @@ func TestSnapshotFollowsMidFramePalette(t *testing.T) {
 	if len(seen) < 2 {
 		t.Error("取得位置を変えてもパレットが同じ")
 	}
+}
+
+// allDiagnostics は Diagnostic の全項目を有効にした（止めない）指定を返す。
+func allDiagnostics() debug.DiagConfig {
+	var c debug.DiagConfig
+	for i := range c.Enabled {
+		c.Enabled[i] = true
+	}
+	return c
 }

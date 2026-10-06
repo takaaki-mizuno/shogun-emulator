@@ -40,8 +40,8 @@ func TestMainMenuHasSpecifiedItems(t *testing.T) {
 	u.version = "test"
 
 	menu := u.buildMainMenu()
-	if len(menu.Items) != 8 {
-		t.Fatalf("メニューの数 = %d, 期待 8", len(menu.Items))
+	if len(menu.Items) != 9 {
+		t.Fatalf("メニューの数 = %d, 期待 9", len(menu.Items))
 	}
 
 	want := map[string][]string{
@@ -55,6 +55,7 @@ func TestMainMenuHasSpecifiedItems(t *testing.T) {
 		"デバッグ": {"ブレークポイント一覧", "トレースの記録", "トレースの書き出し", "トレースの常時出力", "ログカテゴリ…",
 			"オーバーレイを有効にする", "オーバーレイを消去"},
 		"ヘルプ": {"バージョン情報"},
+		"AI":  {"AI からの接続を許可", "接続先をコピー", "接続中のクライアント…", "すべての接続を切る"},
 	}
 	for _, m := range menu.Items {
 		labels := menuLabels(m)

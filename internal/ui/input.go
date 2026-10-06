@@ -29,6 +29,7 @@ func (u *UI) onKeyDown(ev *fyne.KeyEvent) {
 		return
 	}
 	u.pressed[code] = true
+	u.agentKeyDown(code)
 	u.dispatch(code, true)
 }
 
@@ -58,6 +59,14 @@ func (u *UI) dispatch(code string, pressed bool) {
 // エミュレータへコマンドを送る。
 func (u *UI) doAction(a config.Action, pressed bool) {
 	if u.emu.Input.SetAction(a, pressed) {
+		return
+	}
+	if u.agentHasControl() && !agentSafeHotkey(a) {
+		// AI が操作している間は、進行と状態を変えるホットキーを無視する。
+		// AI の進行と人間の操作が混ざると、AI が見る状態が説明できなくなる。
+		if pressed {
+			u.status.notify(i18n.T(i18n.StatusAIHotkeyIgnored))
+		}
 		return
 	}
 
@@ -143,10 +152,33 @@ func (u *UI) toggleMute() {
 }
 
 // toggleFullscreen はフルスクリーンを切り替える。
+//
+// 設定の video.fullscreen は「フルスクリーンで起動する」であり、ここでは
+// 変えない。変えると、フルスクリーンのまま終了したときに次の起動も
+// フルスクリーンになる。
 func (u *UI) toggleFullscreen() {
-	full := !u.win.FullScreen()
-	u.update(func(c *config.Config) { c.Video.Fullscreen = full })
+	u.syncFullscreen()
+	u.win.SetFullScreen(!u.win.FullScreen())
+}
+
+// syncFullscreen は Fyne が覚えているフルスクリーンの状態を OS の実際の
+// 状態に合わせる。
+//
+// macOS では緑のボタンや Esc でフルスクリーンを抜けても Fyne の状態が
+// 変わらない。Fyne はフルスクリーンの間ウィンドウの最小サイズを更新しない
+// ため、拡大率を下げてもウィンドウが大きいまま縮まなくなる。
+func (u *UI) syncFullscreen() {
+	full, ok := nativeFullScreen(u.win)
+	if !ok || full == u.win.FullScreen() {
+		return
+	}
+	// OS の状態と同じ値を渡すため、Fyne は切り替えずに状態だけ直す。
 	u.win.SetFullScreen(full)
+	if !full {
+		// フルスクリーンの間に止まっていた最小サイズの更新をやり直す。
+		u.win.SetFixedSize(false)
+		u.win.Resize(u.preferredSize())
+	}
 }
 
 // saveScreenshot は表示中のフレームを PNG として保存する。

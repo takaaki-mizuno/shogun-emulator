@@ -138,7 +138,8 @@ func TestConditionErrors(t *testing.T) {
 		"(A == 1":     8,
 		"[$0300 == 1": 8,
 		"A # 1":       3,
-		"A == $10000": 6,
+		// 数値は 32 bit まで受け付ける（設計書 14 編 §14.11.4 で 16 bit から拡げた）。
+		"A == $100000000": 6,
 	} {
 		_, err := ParseCondition(expr)
 		if err == nil {

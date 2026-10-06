@@ -1,7 +1,8 @@
 # 12 テスト設計
 
-- 文書バージョン: 1.0
+- 文書バージョン: 1.1
 - 作成日: 2026-09-21
+- 更新日: 2026-10-04（Agent Interface の追加に伴い §12.1・§12.6・§12.7・§12.8・§12.9 を更新し、§12.11 を追加）
 - 対象システム: Shogun Emulator（将軍エミュレータ）
 
 ---
@@ -15,6 +16,7 @@
 | 往復テスト | 状態直列化の網羅性 | `go test ./internal/testrom -run Roundtrip` |
 | 決定論テスト | ホスト由来の非決定性 | `go test ./internal/testrom -run Determinism` |
 | 静的検査 | 依存方向とスレッド境界 | `go test ./internal/arch` |
+| Agent Interface | Agent Command・Transport・常時記録・Scenario・Diagnostic（§12.11） | `go test ./internal/agent/... ./internal/debug/...` |
 | レース検出 | ゴルーチン間の受け渡し | `go test -race $(go list ./... \| grep -v internal/testrom)` |
 
 テスト ROM を必要とするテストは、ROM が存在しないとき `t.Skip` する。
@@ -243,6 +245,7 @@ holy-mapperel は 7z 形式で配布されている。展開には `7z`・`7zz`�
 | 入力 | `allpads`、`read_joy3` |
 | DMA | `dmc_dma_during_read4/dma_2007_write`、`read_write_2007`、`cpu_interrupts_v2/rom_singles/4-irq_and_dma` |
 | 総合 | 240p Test Suite の各項目の目視確認 |
+| Agent Interface | §12.11 のテストがすべて合格し、§12.8.5 の決定論テストが合格する。段階ごとの条件は `docs/plans/` のフェーズ 14–20 に定める |
 
 ### 12.6.1 テスト ROM の前提
 
@@ -388,6 +391,20 @@ func TestCoreImportsOnlyStdlibAndModule(t *testing.T) {
     // internal/nes が依存するのは標準ライブラリとモジュール内のパッケージだけである
 }
 
+func TestAgentDependencyRules(t *testing.T) {
+    // 「14 Agent Interface 設計」§14.2.2 の規則
+    // internal/agent 以下は GUI を参照しない
+    assertNoImport(t, "internal/agent/...", []string{"internal/ui", "fyne.io/"})
+    // MCP ブリッジは internal/agent を直接参照せず、rpc のクライアントだけを使う
+    assertNoDirectImport(t, "internal/agent/mcpbridge", []string{"internal/agent"})
+    // MCP SDK を参照してよいのは internal/agent/mcpbridge だけである
+    assertOnlyImporter(t, "github.com/modelcontextprotocol/go-sdk", "internal/agent/mcpbridge")
+    // コアは Agent Interface を参照しない
+    assertNoImport(t, "internal/nes/...", []string{"internal/agent"})
+    assertNoImport(t, "internal/emu/...", []string{"internal/agent"})
+    assertNoImport(t, "internal/debug/...", []string{"internal/agent"})
+}
+
 func TestUITextLivesInCatalog(t *testing.T) {
     // internal/ui の _test.go 以外のファイル（internal/ui/i18n を除く）に
     // 日本語の文字列リテラルが無いことを検証する（「10 GUI 設計」§10.9）
@@ -398,6 +415,8 @@ func TestUITextLivesInCatalog(t *testing.T) {
 存在しないことを失敗にすると早い段階の CI が通らなくなる。
 
 `assertNoImport` は `go list -json ./...` の出力を解析してモジュール内のインポートグラフを組み立て、そこを推移的にたどる。標準ライブラリの内部はたどらない。`fmt` が `os` を経由して `time` に至るような経路を違反としないためである。標準ライブラリだけで実装するのは、静的検査が外部モジュールの取得なしに動くようにするためである。
+
+`assertNoDirectImport` は直接のインポートだけを見る。`internal/agent/mcpbridge` は `internal/agent/rpc` を介して推移的に `internal/agent` に依存するため、推移的にたどると規則を表せない。`assertOnlyImporter` はモジュール内で指定したモジュールを直接インポートするパッケージが、指定したパッケージだけであることを確かめる。
 
 `assertNoSymbol` と `grepFiles` は `go/parser` と `go/ast` で対象パッケージのファイルを走査する。文字列の一致ではなく構文木を見るのは、コメントと文字列リテラル内の記述を誤検出しないためである。
 
@@ -435,9 +454,19 @@ golden ムービーを再生し、記録されたチェックサムと一致す�
 
 `TestMovieChangesWithOverlay` は、PRG にオーバーレイの変更を置いて同じ入力を与えると最後のハッシュが変わり、オーバーレイを無効にすると元のハッシュに戻ることを確認する。オーバーレイは ROM の内容を変えるため、結果が変わるのが正しい挙動である。フックがエミュレーションの状態を読むだけで書き換えないことを、ハッシュの一致で保証する。
 
+Agent Interface の機能（PPU 書き込みの記録・全項目の Diagnostic・プロファイル・トレースのバスアクセス記録）も、このテストでつなぐデバッガに含める。いずれも観測だけを行い、結果を変えないことを確かめる。Freeze は値を書き換えるため含めない。
+
 ### 12.8.4 クロスプラットフォーム
 
 CI の macOS・Windows・Linux の各ランナーで、同じ golden ムービーのハッシュが一致することを確認する。ハッシュを成果物として保存し、ジョブ間で比較する。`TestDeterminismHashes` が `determinism <ムービー名> <ハッシュ>` の形で標準出力へ書き出す。
+
+### 12.8.5 Agent Command の列の再実行
+
+`TestAgentCommandsReproducible`（`internal/agent`）は、プロセス内の Host に同じ Agent Command の列（ROM の読み込み、`exec.step`・`exec.input_sequence`・`exec.run_until`、`mem.write`、`cpu.set`、`mem.freeze`、`exec.step_unit` でフレームの途中に止まってからの書き込みを含む）を 2 回与え、各 Observation（画像を含む）と最後の状態のハッシュが一致することを確かめる。
+
+同じテストで、途中で Fork した 2 つの Instance に以降の同じ列を与え、両者の Observation が一致することも確かめる。
+
+`TestAgentRecordingReplays` は、上の列の後に `repro.export` で書き出した SHGM（バージョン 2）を通常のムービー再生で再生し、最後の状態のハッシュが一致することを確かめる。介入のレコードが正しい位置に適用されることを保証する（「08 セーブステートと入力ムービー設計」§8.7.2）。
 
 ## 12.9 チェックリスト
 
@@ -454,6 +483,10 @@ CI の macOS・Windows・Linux の各ランナーで、同じ golden ムービ�
 | `Bus.Read` と `Bus.Write` をデバッガから呼んでいない |
 | 浮動小数点の値でエミュレーション状態の分岐をしていない |
 | PAL のドット比を浮動小数点で累積していない |
+| Agent Command がエミュレーション状態に直接触れず、コマンドキューか `WithMachine` を通している |
+| 新しい Agent Command を登録簿に登録し、分類（観測・設定・進行・書き込み）を正しく付けた |
+| Machine State を変える新しい操作を介入として常時記録に残している |
+| Agent Interface の機能が、使われていないときにフックを `nil` に保っている |
 
 ## 12.10 ベンチマーク
 
@@ -481,3 +514,50 @@ func BenchmarkFrame(b *testing.B) {
 | PPU ビューア 5 つ | フレーム末とスキャンライン 1 か所のスナップショットを購読する |
 
 `BenchmarkPPUViewersDraw`（`internal/ui`）は、PPU 系の 5 つのビューアを 1 回ずつ描き直す UI スレッドの費用を計測する。
+
+## 12.11 Agent Interface のテスト
+
+「14 Agent Interface 設計」§14.24 の各テストを次のとおり置く。
+
+| テスト | パッケージ | 内容 |
+|---|---|---|
+| Agent Command の単体テスト | `internal/agent` | 各 Agent Command をプロセス内の Host に対して呼び、結果の形とエラーの `kind` を確かめる |
+| Transport の往復 | `internal/agent/rpc`・`internal/agent/mcpbridge`・`cmd/shogun` | 同じ要求を JSON-RPC・MCP ブリッジ・`shogun ctl` で送り、同じ結果を得る。MCP は SDK のクライアントを `net.Pipe` でつないで確かめる |
+| 名前の変換 | `internal/agent` | 登録簿のすべての名前が JSON-RPC・MCP・CLI の変換で往復できる |
+| 決定論 | `internal/agent` | §12.8.5 |
+| 常時記録の再生 | `internal/agent` | §12.8.5 の `TestAgentRecordingReplays` |
+| Re-Reach | `internal/agent` | 同じ ROM で `rom.reload` と Re-Reach（`frame`）を行い、読み直す前と同じ状態ハッシュになる |
+| `.dbg` の読み込み | `internal/debug` | `testdata/agent/` の `.dbg` から、バンクを区別した Symbol とソース行を得る。バージョン 1 のシンボルファイルの移行 |
+| 式の拡張 | `internal/debug` | 「09 デバッガ設計」§9.6.1 の既存の式の結果が拡張後も変わらない。追加した要素の評価 |
+| Game State | `internal/debug` | 各型と修飾の解釈。列挙の名前での比較 |
+| Diagnostic | `internal/debug` | 各項目を起こすテスト ROM で検知する。検知を有効にしても §12.8.3 のハッシュが変わらない |
+| Scenario | `internal/agent/scenario`・`cmd/shogun` | 合格する Scenario と失敗する Scenario を実行し、終了コード（0・5・6）と JUnit XML を確かめる。お手本の画像の比較と `--update-golden` |
+| セキュリティ | `internal/agent/rpc` | トークンなし・誤ったトークンの接続を断る。発見ファイルとソケットのパーミッションが 0600。`127.0.0.1` と `::1` 以外の TCP アドレスを断る |
+
+### 12.11.1 テスト用 ROM
+
+Agent Interface のテストに使う ROM は自作し、`testdata/agent/` に ca65 のソースと共に置く。既存のエミュレータやゲームのコードを使わない（project.md のクリーンルームの規則）。
+
+| ROM | 用途 |
+|---|---|
+| バンク切り替えを持つ ROM（マッパー 1 または 4） | 同じ CPU アドレスに異なる Symbol が置かれる場合の `.dbg` の読み込みとバンクを区別したブレークポイント |
+| Game State を持つ小さなゲーム | 入力で座標と状態が変わる。進行・`exec.run_until`・Scenario・Re-Reach |
+| Diagnostic を起こす ROM | §14.20.1 の各項目を、入力やフレーム番号で順に起こす |
+
+ビルド済みの `.nes` と `.dbg` をリポジトリに含める。CI に cc65 を入れずに済ませるためである。テスト ROM のソースを直したときに作り直す手順は `tools/build-agent-testroms`（ca65/ld65 を呼ぶスクリプト）に置く。開発環境に cc65 が無い場合は、作り直しが必要になった時点で導入する。テストは ROM のソースではなく、リポジトリに含めたビルド済みのファイルを使う。
+
+テスト ROM が存在しないとき、そのテストは `t.Skip` せずに失敗させる。テスト ROM はリポジトリに含めるため、存在しないのはリポジトリの不備だからである。
+
+### 12.11.2 Scenario による利用者のテスト
+
+利用者（ゲームの開発者）は Scenario（「14 Agent Interface 設計」§14.17）で自分のゲームのテストを書き、`shogun run` で CI に流す。エミュレータ自身のテストではないが、`shogun run` の挙動はこの節の約束に従う。
+
+| 項目 | 約束 |
+|---|---|
+| 決定論 | Scenario の Instance は既定で `deterministic`。同じ Scenario は何度実行しても同じ結果になる。`timeout_ms` を使ったステップは警告する |
+| 画面の比較 | パレット適用前の値で比べる（既定のパレットで描いた PNG と比べる）。パレットの設定に依らない |
+| 終了コード | 0 合格、1 ROM などの読み込みの失敗、5 アサーションの失敗、6 Scenario ファイルの不正 |
+| 出力 | 標準出力に成否・所要時間・失敗の内容。`--junit` で JUnit XML。失敗ごとに Repro |
+| お手本 | `--update-golden` で作り、リポジトリに含める |
+
+CI の例（GitHub Actions）と、`scenario.export` で書き出した Scenario にアサーションを足す手順は利用者向けの文書（`packaging/usage.md` の「自動テスト（Scenario）」）に置く。

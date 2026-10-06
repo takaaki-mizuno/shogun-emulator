@@ -57,11 +57,13 @@ func (p *PPU) WriteRegister(reg uint16, v uint8) {
 	switch reg {
 	case regCtrl:
 		if p.warmupDots > 0 {
+			p.compat(CompatWarmupWrite, 0x2000|reg)
 			return
 		}
 		p.writeControl(v)
 	case regMask:
 		if p.warmupDots > 0 {
+			p.compat(CompatWarmupWrite, 0x2000|reg)
 			return
 		}
 		p.mask = Mask(v)
@@ -73,12 +75,17 @@ func (p *PPU) WriteRegister(reg uint16, v uint8) {
 		p.writeOAMData(v)
 	case regScroll:
 		if p.warmupDots > 0 {
+			p.compat(CompatWarmupWrite, 0x2000|reg)
 			return
 		}
 		p.writeScroll(v)
 	case regAddr:
 		if p.warmupDots > 0 {
+			p.compat(CompatWarmupWrite, 0x2000|reg)
 			return
+		}
+		if p.Compat != nil && p.renderingActive() {
+			p.compat(CompatRenderAccess, 0x2006)
 		}
 		p.writeAddr(v)
 	case regData:
@@ -200,8 +207,9 @@ const (
 // そのまま出る。
 func (p *PPU) readData() (value, mask uint8) {
 	addr := p.v & 0x3FFF
-	if p.Warn != nil && p.renderingActive() {
+	if (p.Warn != nil || p.Compat != nil) && p.renderingActive() {
 		p.warn("レンダリング中に $2007 を読んだ（v=$%04X）", p.v)
+		p.compat(CompatRenderAccess, 0x2007)
 	}
 	p.putAddressOnBus(addr)
 	var out uint8
@@ -228,8 +236,9 @@ func (p *PPU) readData() (value, mask uint8) {
 
 // writeData は $2007 へ書く。
 func (p *PPU) writeData(v uint8) {
-	if p.Warn != nil && p.renderingActive() {
+	if (p.Warn != nil || p.Compat != nil) && p.renderingActive() {
 		p.warn("レンダリング中に $2007 へ書いた（v=$%04X）", p.v)
+		p.compat(CompatRenderAccess, 0x2007)
 	}
 	p.putAddressOnBus(p.v & 0x3FFF)
 	p.writeVRAM(p.v&0x3FFF, v)

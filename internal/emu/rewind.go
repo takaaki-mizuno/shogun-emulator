@@ -286,12 +286,16 @@ func (e *Emulator) rewindFrames(frames int) error {
 		return err
 	}
 	e.afterLoadState()
+	e.dbg.StateLoaded()
 
 	// 記録した入力で目標まで前方再生する。映像と音声は出さない。
 	// 音声を出したままにすると、遡る間の波形がリングに溜まり、
 	// 高水位で待つ経路（設計書 02 編 §2.6）で進行が止まる。
 	e.silent = true
 	e.machine.APU.SetOutput(nil)
+	// 前方再生ではラッチを直接与える。遅らせたフレームの開始の処理を
+	// 走らせない。
+	e.framePending = false
 	for f := st.frame; f < target; f++ {
 		e.latch.set(e.rewind.input(f))
 		for !e.stepOnce() {
@@ -311,7 +315,10 @@ func (e *Emulator) rewindFrames(frames int) error {
 	if e.recorder != nil {
 		e.recorder.TruncateTo(target)
 	}
-	e.beginFrame()
+	if e.journal.rec != nil && target >= e.journal.base {
+		e.journal.rec.TruncateTo(target - e.journal.base)
+	}
+	e.frameBoundary()
 	e.updateStatus()
 	return nil
 }

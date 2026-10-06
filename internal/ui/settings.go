@@ -29,6 +29,7 @@ const (
 	settingsTabDebug
 	settingsTabState
 	settingsTabAppearance
+	settingsTabAI
 )
 
 // 反映の時期（設計書 11 編 §11.3.2）。
@@ -98,6 +99,7 @@ func (f *settingsForm) content() fyne.CanvasObject {
 		container.NewTabItem(i18n.T(i18n.MenuDebug), f.page(timingMixed, f.debugItems()...)),
 		container.NewTabItem(i18n.T(i18n.SetTabState), f.page(timingReload, f.stateItems()...)),
 		container.NewTabItem(i18n.T(i18n.SetTabAppearance), f.page(timingNow, f.appearanceItems()...)),
+		container.NewTabItem(i18n.T(i18n.SetTabAI), f.page(timingMixed, f.agentItems()...)),
 	)
 	defaults := widget.NewButton(i18n.T(i18n.SetResetDefaults), f.resetDefaults)
 	openDir := widget.NewButton(i18n.T(i18n.SetOpenConfigDir), f.openConfigDir)
@@ -441,6 +443,31 @@ func (f *settingsForm) debugItems() []fyne.CanvasObject {
 	}
 }
 
+// agentItems は AI のタブの項目（設計書 14 編 §14.23）。
+func (f *settingsForm) agentItems() []fyne.CanvasObject {
+	ag := &f.edit.Agent
+	listen := []choiceOpt{{config.AgentListenUnix, i18n.T(i18n.SetAgentListenUnix)}, {"tcp:127.0.0.1:0", i18n.T(i18n.SetAgentListenTCP)}}
+	if ag.Listen != config.AgentListenUnix && ag.Listen != "tcp:127.0.0.1:0" {
+		// 設定ファイルで決まったポートを指定しているときは、その値も選べるようにする。
+		listen = append(listen, choiceOpt{ag.Listen, ag.Listen})
+	}
+	return []fyne.CanvasObject{
+		f.check(i18n.T(i18n.SetAgentEnabled), i18n.T(i18n.SetAgentEnabledDesc),
+			func() bool { return ag.Enabled }, func(b bool) { ag.Enabled = b },
+			func(c *config.Config) any { return c.Agent.Enabled }),
+		f.choice(i18n.T(i18n.SetAgentListen), i18n.T(i18n.SetAgentListenDesc), listen,
+			func() string { return ag.Listen }, func(s string) { ag.Listen = s },
+			func(c *config.Config) any { return c.Agent.Listen }),
+		f.intField(i18n.T(i18n.SetAgentScale), i18n.T(i18n.SetAgentScaleDesc), 1, 4,
+			func() int { return ag.ObserveImageScale }, func(n int) { ag.ObserveImageScale = n },
+			func(c *config.Config) any { return c.Agent.ObserveImageScale }),
+		f.choice(i18n.T(i18n.SetRomWatch), i18n.T(i18n.SetRomWatchDesc),
+			[]choiceOpt{{config.RomWatchNotify, i18n.T(i18n.SetRomWatchNotify)}, {config.RomWatchReload, i18n.T(i18n.SetRomWatchReload)}},
+			func() string { return ag.RomWatchAction }, func(s string) { ag.RomWatchAction = s },
+			func(c *config.Config) any { return c.Agent.RomWatchAction }),
+	}
+}
+
 func (f *settingsForm) stateItems() []fyne.CanvasObject {
 	st := &f.edit.State
 	m := &f.edit.Movie
@@ -560,6 +587,11 @@ func (u *UI) applySettings(old *config.Config, keys *config.Keybindings) {
 		u.switchLayout()
 	}
 	u.applyKeys(keys)
+	if c.Agent.Enabled != old.Agent.Enabled {
+		// 有効にすると待ち受けを始め、無効にすると全接続を切る（設計書 11 編
+		// §11.3.2 の即時の項目）。
+		u.SetAgentEnabled(c.Agent.Enabled, false)
+	}
 
 	var notes []string
 	if u.emu.Status().Loaded && needsReload(old, c) {
@@ -584,6 +616,7 @@ func needsReload(a, b *config.Config) bool {
 // needsRestart は再起動後に効く項目が変わったかを返す。
 func needsRestart(a, b *config.Config) bool {
 	return a.Audio.Enabled != b.Audio.Enabled || a.Debug.LogOutput != b.Debug.LogOutput ||
+		a.Agent.Listen != b.Agent.Listen || a.Agent.MaxInstances != b.Agent.MaxInstances ||
 		a.Debug.LogMaxBytes != b.Debug.LogMaxBytes || a.Debug.LogGenerations != b.Debug.LogGenerations ||
 		a.Debug.TraceRingSize != b.Debug.TraceRingSize
 }

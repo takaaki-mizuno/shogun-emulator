@@ -26,6 +26,8 @@
 - Vs. System / PlayChoice-10
 - ネットプレイ、実績、チート
 
+> **2026-10-04 追記: 第 2 弾として Agent Interface を加える。** AI エージェントやプログラムからエミュレータを操作・観測・デバッグする窓口（MCP・JSON-RPC・CLI）である。設計は `docs/specifications/14-agent-interface.md`、構成の判断は `docs/adr/0001-jsonrpc-core-with-mcp-bridge.md` にまとめた。
+
 ## 2. PAL / Dendy
 
 **第 1 弾では「設計に入れるが検証しない」。**
@@ -148,7 +150,7 @@ NES 2.0 のヘッダでコンソール種別とハードウェア種別が指定
 | ~~巻き戻し（rewind）~~ | — | **第 1 弾に移動** → `14_savestate_and_movie.md` §8 |
 | ~~入力ムービー~~ | — | **第 1 弾に移動** → `14_savestate_and_movie.md` §7 |
 | run-ahead（入力遅延削減） | 低 | セーブステート + 再実行。**第 1 弾の基盤の上にそのまま載る**（`14` §8.2） |
-| チート（Game Genie / Pro Action Replay） | 低 | メモリパッチ |
+| チート（Game Genie / Pro Action Replay） | 低 | メモリパッチ。**2026-10-04: 値の固定（Freeze）はデバッグ機能として Agent Interface（設計書 14 編 §14.13.2）で扱う。Game Genie 等のコードの入力と適用は引き続き範囲外** |
 | NSF / NSFe 再生 | 低 | 音楽ファイル形式。APU が完成していれば比較的容易 |
 | CRT / NTSC フィルタ | 低 | シェーダが必要 |
 | ネットプレイ | 低 | 決定論的な実行が必要（lock-step なら成立する） |

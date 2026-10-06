@@ -71,3 +71,25 @@ func TestSearch(t *testing.T) {
 		t.Errorf("文字列の検索 = %d, 期待 2", got)
 	}
 }
+
+// TestMemLayoutColumnsMatchLine は byteColumn と asciiColumn が line の文字位置と合うことを確かめる。
+func TestMemLayoutColumnsMatchLine(t *testing.T) {
+	for _, perRow := range []int{1, 4, 8, 9, 16, 32} {
+		l := memLayout{perRow: perRow, digits: 4}
+		data := make([]uint8, perRow)
+		for i := range data {
+			data[i] = 0x41 + uint8(i%26)
+		}
+		line := l.line(0, data)
+		for i := range data {
+			c := l.byteColumn(i)
+			if want := []byte{"0123456789ABCDEF"[data[i]>>4], "0123456789ABCDEF"[data[i]&0xF]}; line[c:c+2] != string(want) {
+				t.Errorf("perRow=%d: byteColumn(%d) の位置が %q", perRow, i, line[c:c+2])
+			}
+			a := l.asciiColumn() + i
+			if a >= len(line) || line[a] != data[i] {
+				t.Errorf("perRow=%d: asciiColumn()+%d = %d が行の外か不一致 (len=%d)", perRow, i, a, len(line))
+			}
+		}
+	}
+}

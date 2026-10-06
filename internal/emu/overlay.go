@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/takaakimizuno/shogun-emulator/internal/emu/movie"
 	"os"
 	"path/filepath"
 
@@ -142,6 +143,7 @@ func (e *Emulator) withEditableMachine(fn func(m *nes.NES) error) error {
 func (e *Emulator) SetOverlayEnabled(on bool) error {
 	return e.withEditableMachine(func(m *nes.NES) error {
 		m.ROM.Overlay().SetEnabled(on)
+		e.intervene(movie.Record{Kind: movie.KindOverlay, Flag: on})
 		e.storeOverlay()
 		return nil
 	})

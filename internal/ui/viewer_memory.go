@@ -210,10 +210,10 @@ func (v *memoryViewer) read(first, count int) memorySnapshot {
 		snap.pc, snap.sp = v.pointers(n)
 		if sym := d.Symbols(); sym != nil {
 			for _, a := range sym.Watch() {
-				snap.watch = append(snap.watch, watchValue{addr: a, name: sym.Label(a), value: n.Bus.Peek(a)})
+				snap.watch = append(snap.watch, watchValue{addr: a, name: d.Label(a), value: n.Bus.Peek(a)})
 			}
 			if a, ok := v.cpuAddr(v.cursor); ok {
-				snap.label = sym.Label(a)
+				snap.label = d.Label(a)
 			}
 		}
 	})
@@ -506,7 +506,14 @@ func (v *memoryViewer) setLabel(name string) {
 		v.u.showError(errors.New(i18n.T(i18n.MemLabelSpaces)))
 		return
 	}
-	v.withSymbols(func(s *debug.Symbols) { s.SetLabel(a, name) })
+	// $8000 以上は現在見えているバンクの位置で持つ（設計書 09 編 §9.9）。
+	v.u.emu.WithDebugger(func(d *debug.Debugger) {
+		if s, n := d.Symbols(), d.Machine(); s != nil && n != nil {
+			s.SetLabel(a, name, n.Cart.PRGOffset)
+		}
+	})
+	v.u.emu.SaveSymbols()
+	v.Refresh()
 }
 
 // OnClose は変更追跡の利用をやめる。

@@ -36,6 +36,7 @@ func (u *UI) buildMainMenu() *fyne.MainMenu {
 		u.movieMenu(),
 		u.viewMenu(),
 		u.debugMenu(),
+		u.aiMenu(),
 		u.settingsMenu(),
 		u.helpMenu(),
 	)
@@ -297,6 +298,7 @@ func (u *UI) OpenROM(path string) {
 		return
 	}
 	u.addRecent(path)
+	u.agentROMLoaded(path)
 	u.paused = false
 	u.afterROMChange()
 }
@@ -306,6 +308,7 @@ func (u *UI) OpenROM(path string) {
 // 起動時の引数で読み込んだ場合に使う。Run を呼ぶ前に呼ぶ。
 func (u *UI) NotifyROMLoaded(path string) {
 	u.addRecent(path)
+	u.agentUI.romPath = path
 }
 
 // afterROMChange は ROM の読み込みと取り外しの後に表示を合わせる。

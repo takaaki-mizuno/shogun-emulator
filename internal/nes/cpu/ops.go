@@ -183,9 +183,9 @@ func (c *CPU) branch(target uint16, taken bool) {
 	// ポーリング点に対応する。
 	nmi, irq := c.pollNMIPrev, c.pollIRQPrev
 
-	c.read(c.PC)
+	c.dummyRead(c.PC)
 	if target&0xFF00 != c.PC&0xFF00 {
-		c.read(c.PC&0xFF00 | target&0x00FF)
+		c.dummyRead(c.PC&0xFF00 | target&0x00FF)
 		// PCH 修正サイクルの前のポーリング結果を論理和する。
 		nmi = nmi || c.pollNMIPrev
 		irq = irq || c.pollIRQPrev
@@ -227,7 +227,7 @@ func opRTS(c *CPU, _ uint16) {
 	lo := c.pull()
 	hi := c.pull()
 	c.PC = uint16(hi)<<8 | uint16(lo)
-	c.read(c.PC)
+	c.dummyRead(c.PC)
 	c.PC++
 }
 

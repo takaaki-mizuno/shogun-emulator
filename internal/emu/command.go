@@ -21,7 +21,10 @@ type cmdLoadMachine struct {
 	// battery は不揮発メモリの保存先。持たない ROM では nil。
 	battery *battery
 	name    string
-	done    chan error
+	// path は ROM のファイルのパス。分からないとき空。.dbg と Game State
+	// Definition を探すために使う。
+	path string
+	done chan error
 }
 
 // cmdUnload は本体を取り外す。
@@ -57,7 +60,22 @@ type cmdStep struct {
 	count int
 	// addr は RunToCursor の目標アドレス。
 	addr uint16
+	// done は止まったときに結果を受け取る。nil のとき知らせない
+	// （GUI の操作）。容量 1 のチャネルを渡す。
+	done chan StepResult
+	// input は進める間のポート 1 と 2 の入力。nil のとき変えない。
+	// エージェントの入力の Instance でだけ使う。
+	input *[2]uint8
+	// cond は止める条件。nil のとき使わない。instr が true なら命令境界
+	// ごと、false ならフレームの開始ごとに判定する。StepFrame でだけ使う。
+	cond  func() bool
+	instr bool
+	// noBreak はブレークポイントで止まらないことを表す。
+	noBreak bool
 }
+
+// cmdAgentInput はエージェントの入力の経路を切り替える。
+type cmdAgentInput struct{ on bool }
 
 // cmdSaveState は状態を保存する。
 type cmdSaveState struct {
@@ -123,6 +141,7 @@ func (cmdSetSpeed) isCommand()       {}
 func (cmdSetMuted) isCommand()       {}
 func (cmdPause) isCommand()          {}
 func (cmdStep) isCommand()           {}
+func (cmdAgentInput) isCommand()     {}
 func (cmdSaveState) isCommand()      {}
 func (cmdLoadState) isCommand()      {}
 func (cmdFunc) isCommand()           {}
@@ -156,6 +175,8 @@ func commandDone(c command) chan error {
 	case cmdPlayMovie:
 		return v.done
 	case cmdStopMovie:
+		return v.done
+	case cmdReplay:
 		return v.done
 	}
 	return nil

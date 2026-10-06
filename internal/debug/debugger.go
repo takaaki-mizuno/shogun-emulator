@@ -22,6 +22,8 @@ type BreakInfo struct {
 	// Scanline と Dot は止まったときの PPU の位置。
 	Scanline int
 	Dot      int
+	// Diagnostic は Diagnostic で止まったときの検知。それ以外では nil。
+	Diagnostic *Diagnostic
 }
 
 // Features はデバッガの機能のうち、利用者が有効にしているもの。
@@ -88,6 +90,26 @@ type Debugger struct {
 	// PPU 位置ブレークポイントがこれを使う。internal/emu が設定する。
 	OnCycleBreak func()
 
+	// ppuLog は PPU 書き込みの記録。記録していないとき nil。
+	ppuLog *ppuWriteLog
+	// freezes は値を固定する位置。
+	freezes []Freeze
+	// exprCache は Game State の位置の式の解析結果。exprGen の Symbol の版で作った。
+	exprCache map[string]*AddrExpr
+	exprGen   uint64
+
+	// diag は Diagnostic の状態。DiagHook は新しい種類と位置の組の最初の 1 件を
+	// 知らせる（internal/emu が設定する）。
+	diag      diagState
+	diagNeeds diagNeeds
+	DiagHook  func(Diagnostic)
+	// agentTrace は trace.enable の指定。traceFrame はトレースに最後に記録した
+	// フレーム番号。
+	agentTrace AgentTrace
+	traceFrame uint64
+	// prof はプロファイル。始めていないとき nil。
+	prof *profiler
+
 	// published は UI スレッドへ見せる一覧。
 	publishedMu sync.Mutex
 	published   []Breakpoint
@@ -131,11 +153,17 @@ func (d *Debugger) Attach(n *nes.NES, symbols *Symbols) {
 	d.changes.Reset()
 	d.log.ResetRepeats()
 	d.tracer.Clear()
+	d.traceFrame = ^uint64(0)
+	d.resetDiag()
+	d.prof = nil
 	d.ramWritten = [2048]bool{}
 	d.hit = nil
 	d.mmc3Written = false
+	// 記録と Freeze は読み込んだ本体に対するものである。差し替えたら捨てる。
+	d.ppuLog = nil
+	d.freezes = nil
 	d.bps = NewBreakpointSet()
-	for _, b := range symbols.Breakpoints() {
+	for _, b := range symbols.Breakpoints(d) {
 		d.bps.Add(b)
 	}
 	d.publish()
@@ -276,7 +304,7 @@ func (d *Debugger) SetBreakpointCondition(id int, expr string) error {
 		d.afterBreakpointChange()
 		return nil
 	}
-	c, err := ParseCondition(expr)
+	c, err := ParseConditionWith(expr, d)
 	if err != nil {
 		return err
 	}
@@ -373,15 +401,21 @@ func (d *Debugger) updateHooks() {
 	cats := d.log.Categories
 	f := d.features
 
-	if d.bps.Count(BreakExec) > 0 || f.Tracing || f.CPUView {
+	dn := d.diag.cfg.needs()
+	d.diagNeeds = dn
+	tr := d.tracing()
+	busTrace := d.agentTrace.Enabled && d.tracer.BusEnabled()
+	prof := d.profiling()
+	if d.bps.Count(BreakExec) > 0 || tr || f.CPUView || d.ppuLog != nil || dn.beforeExec || prof {
 		h.OnBeforeExec = d.onBeforeExec
 	}
 	busLog := cats&(CatTraceCPUBus|CatPPURegister|CatAPURegister|CatInput|CatMapper|CatDMA) != 0
-	if d.bps.Count(BreakRead) > 0 || d.bps.EventCount(EventUninitializedRAMRead) > 0 || busLog {
+	if d.bps.Count(BreakRead) > 0 || d.bps.EventCount(EventUninitializedRAMRead) > 0 || busLog || dn.read || busTrace || prof {
 		h.OnCPURead = d.onCPURead
 	}
 	if d.bps.Count(BreakWrite) > 0 || d.bps.EventCount(EventUninitializedRAMRead) > 0 ||
-		d.bps.EventCount(EventMMC3IRQReloadWithoutClocks) > 0 || busLog {
+		d.bps.EventCount(EventMMC3IRQReloadWithoutClocks) > 0 || busLog || d.ppuLog != nil || len(d.freezes) > 0 ||
+		dn.write || busTrace || prof {
 		h.OnCPUWrite = d.onCPUWrite
 	}
 	if d.bps.Count(BreakPPUPosition) > 0 || d.bps.EventCount(EventMapperIRQ) > 0 ||
@@ -392,17 +426,28 @@ func (d *Debugger) updateHooks() {
 		d.mapperIRQ = d.n.Cart.IRQAsserted()
 	}
 	if d.bps.EventCount(EventNMI) > 0 || d.bps.EventCount(EventIRQ) > 0 ||
-		d.bps.EventCount(EventReset) > 0 || f.CPUView || cats&CatPPUTiming != 0 {
+		d.bps.EventCount(EventReset) > 0 || f.CPUView || cats&CatPPUTiming != 0 || dn.interrupt || tr || prof {
 		h.OnInterrupt = d.onInterrupt
 	}
 	if d.bps.EventCount(EventSprite0Hit) > 0 {
 		h.OnSprite0Hit = d.onSprite0Hit
 	}
-	if d.snapshotWanted(true) || f.ChangeTracking || cats&CatDMA != 0 {
+	if d.snapshotWanted(true) || f.ChangeTracking || cats&CatDMA != 0 || d.ppuLog != nil || dn.frame {
 		h.OnFrameComplete = d.onFrameComplete
 	}
 	d.n.SetHooks(h)
 	d.attachWarn()
+	// 互換性の事象は Warn と同じ判定から構造化して受け取る（§14.20.2）。
+	if dn.cpuCompat {
+		d.n.CPU.Compat = d.onCPUCompat
+	} else {
+		d.n.CPU.Compat = nil
+	}
+	if dn.ppuCompat {
+		d.n.PPU.Compat = d.onPPUCompat
+	} else {
+		d.n.PPU.Compat = nil
+	}
 }
 
 // RefreshHooks は CycleHook を差し替えた後にフックを設定し直す。
@@ -429,6 +474,8 @@ func (d *Debugger) attachWarn() {
 func (d *Debugger) detachWarn() {
 	d.n.CPU.Warn = nil
 	d.n.PPU.Warn = nil
+	d.n.CPU.Compat = nil
+	d.n.PPU.Compat = nil
 	d.n.Bus.Warn = nil
 	d.n.Warn = nil
 	d.n.APU.OnFrameStep = nil
@@ -437,8 +484,21 @@ func (d *Debugger) detachWarn() {
 // onBeforeExec は命令を実行する前に呼ばれる。true を返すと止める。
 func (d *Debugger) onBeforeExec(pc uint16) bool {
 	n := d.n
-	if d.features.Tracing {
+	if d.ppuLog != nil {
+		d.ppuLog.instrPC = pc
+	}
+	if d.tracing() {
+		if fr := n.Frames(); fr != d.traceFrame {
+			d.traceFrame = fr
+			d.tracer.NoteFrame(fr, n.Cycles())
+		}
 		d.tracer.Record(n.CPU.TraceRecord(n.PPU.Scanline(), n.PPU.Dot()))
+	}
+	if d.prof != nil && d.prof.active {
+		d.profileBeforeExec(pc)
+	}
+	if d.diagNeeds.beforeExec && d.diagBeforeExec(pc) {
+		return true
 	}
 	if d.features.CPUView {
 		if off, ok := n.Cart.PRGOffset(pc); ok {
@@ -472,7 +532,14 @@ func (d *Debugger) SkipExecAt(pc uint16) {
 // onCPURead はバスの読み出しで呼ばれる。
 func (d *Debugger) onCPURead(addr uint16, v uint8) {
 	d.logBus(addr, v, false)
-	if d.bps.EventCount(EventUninitializedRAMRead) > 0 && addr < 0x2000 && !d.ramWritten[addr&0x07FF] {
+	if d.agentTrace.Enabled && d.tracer.BusEnabled() {
+		d.tracer.RecordBus(d.n.Cycles(), addr, v, false)
+	}
+	if d.prof != nil && d.prof.active {
+		d.profileAccess(addr, false)
+	}
+	d.diagRead(addr)
+	if d.bps.EventCount(EventUninitializedRAMRead) > 0 && d.uninitRAMRead(addr) {
 		if b := d.bps.MatchEvent(EventUninitializedRAMRead, d); b != nil {
 			d.raise(b, fmt.Sprintf("書き込まれていない RAM $%04X を読んだ", addr))
 		}
@@ -484,7 +551,20 @@ func (d *Debugger) onCPURead(addr uint16, v uint8) {
 
 // onCPUWrite はバスの書き込みで呼ばれる。
 func (d *Debugger) onCPUWrite(addr uint16, v, old uint8) {
+	if len(d.freezes) > 0 && (addr < 0x2000 || addr >= 0x6000 && addr < 0x8000) {
+		d.applyFreeze(addr)
+	}
+	if d.ppuLog != nil {
+		d.recordPPUWrite(addr, v)
+	}
 	d.logBus(addr, v, true)
+	if d.agentTrace.Enabled && d.tracer.BusEnabled() {
+		d.tracer.RecordBus(d.n.Cycles(), addr, v, true)
+	}
+	if d.prof != nil && d.prof.active {
+		d.profileAccess(addr, true)
+	}
+	d.diagWrite(addr, v)
 	if addr < 0x2000 {
 		d.ramWritten[addr&0x07FF] = true
 	}
@@ -583,6 +663,15 @@ func (d *Debugger) checkPPUPosition(line, dot int) {
 // onInterrupt は割り込みシーケンスを終えたときに呼ばれる。
 func (d *Debugger) onInterrupt(k cpu.Interrupt) {
 	n := d.n
+	if d.tracing() {
+		d.tracer.NoteInterrupt(k, n.Cycles(), n.CPU.PC)
+	}
+	if d.prof != nil && d.prof.active {
+		d.profileInterrupt(k)
+	}
+	if d.diagNeeds.interrupt {
+		d.diagInterrupt(k)
+	}
 	if d.features.CPUView {
 		d.calls.OnInterrupt(k, n.CPU.PC, n.Bus.Peek, n.CPU.S)
 	}
@@ -642,6 +731,12 @@ func (d *Debugger) onFrameComplete(*video.Frame) {
 			d.log.Log(CatDMA, "DMC DMA %d 回（フレーム %d）", dmc-d.dmcCount, n.Frames())
 		}
 		d.dmcCount = dmc
+	}
+	if d.ppuLog != nil {
+		d.finishPPUFrame()
+	}
+	if d.diag.cfg.Enabled[DiagExecuteData] {
+		d.refreshExecData(false)
 	}
 }
 
