@@ -82,6 +82,8 @@ type UI struct {
 
 	// version はバージョン情報の表示に使う文字列。
 	version string
+	// commit と buildDate は「バージョン情報」に出す。SetBuildDetails で設定する。
+	commit, buildDate string
 
 	// refreshAnim は画面の更新を駆動するアニメーション。
 	refreshAnim *fyne.Animation
@@ -173,6 +175,12 @@ func loadPalette(path string) *video.Palette {
 		return video.DefaultPalette()
 	}
 	return p
+}
+
+// SetBuildDetails は「バージョン情報」に出すコミットとビルド日時を設定する。
+// Run の前に呼ぶ。
+func (u *UI) SetBuildDetails(commit, buildDate string) {
+	u.commit, u.buildDate = commit, buildDate
 }
 
 // Run はメインウィンドウを表示してイベントループへ入る。
@@ -395,7 +403,9 @@ func (u *UI) refresh() {
 	u.drainNotices()
 	u.checkDesync()
 	u.refreshAgent()
-	u.status.update(u.emu.Status())
+	st := u.emu.Status()
+	u.screen.setLogoVisible(!st.Loaded)
+	u.status.update(st)
 	u.refreshViewers()
 }
 

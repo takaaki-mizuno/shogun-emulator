@@ -143,15 +143,16 @@ func (v *cpuViewer) Content() fyne.CanvasObject {
 	return split
 }
 
-// cpuSideWidthSample は右側の幅を決めるための見本の行。位置の表示の
-// 2 行目で、値が大きいときの長さにする。
-const cpuSideWidthSample = "フレーム: 9999999  スキャンライン: 261  ドット: 340"
-
-// cpuSideWidth は右側の固定の幅を返す。レジスタの欄と見本の行の広い方とする。
+// cpuSideWidth は右側の固定の幅を返す。レジスタの欄と、値が大きいときの
+// 位置の表示の各行のうち、最も広いものとする。
 func cpuSideWidth(regForm fyne.CanvasObject) float32 {
-	sample := fyne.MeasureText(cpuSideWidthSample, theme.TextSize(), fyne.TextStyle{}).Width +
-		2*theme.InnerPadding() + theme.ScrollBarSize()
-	return max(regForm.MinSize().Width, sample)
+	w := regForm.MinSize().Width
+	sample := i18n.T(i18n.CPUPosition, uint64(9999999999), uint64(9999999), 261, 340)
+	for _, line := range strings.Split(sample, "\n") {
+		lw := fyne.MeasureText(line, theme.TextSize(), fyne.TextStyle{}).Width
+		w = max(w, lw+2*theme.InnerPadding()+theme.ScrollBarSize())
+	}
+	return w
 }
 
 // sideLayout は中身を固定の幅で置く。高さは中身に従う。

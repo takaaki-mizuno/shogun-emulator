@@ -49,29 +49,34 @@ func run(args []string) error {
 	case "macos":
 		arm := fs.String("arm64", "", "arm64 の実行ファイル")
 		amd := fs.String("amd64", "", "amd64 の実行ファイル")
+		layout := fs.Bool("layout", true, ".dmg のウィンドウの見た目を Finder で設定する")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		path, err := packageMacOS(root, *version, *arm, *amd, *out)
+		path, err := packageMacOS(root, *version, *arm, *amd, *out, *layout)
 		report(path)
 		return err
 	case "windows":
 		arch := fs.String("arch", "amd64", "アーキテクチャ")
 		bin := fs.String("bin", "", "shogun.exe のパス")
+		msi := fs.Bool("msi", true, ".msi も作る（WiX Toolset v5 が要る。環境変数 WIX に wix の場所を入れられる）")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		path, err := packageWindows(root, *version, *arch, *bin, *out)
-		report(path)
+		paths, err := packageWindows(root, *version, *arch, *bin, *out, *msi)
+		for _, p := range paths {
+			report(p)
+		}
 		return err
 	case "linux":
 		arch := fs.String("arch", "amd64", "アーキテクチャ")
 		bin := fs.String("bin", "", "shogun のパス")
+		packages := fs.Bool("packages", true, ".deb と .rpm も作る（go tool nfpm を使う）")
 		appimage := fs.Bool("appimage", false, "AppImage も作る（環境変数 APPIMAGETOOL に appimagetool の場所を入れる）")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		paths, err := packageLinux(root, *version, *arch, *bin, *out, *appimage)
+		paths, err := packageLinux(root, *version, *arch, *bin, *out, *packages, *appimage)
 		for _, p := range paths {
 			report(p)
 		}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"image"
 	"image/color"
 	"image/png"
 	"os"
@@ -11,10 +12,10 @@ import (
 	"testing"
 )
 
-// TestGeneratedIconsMatchSource はリポジトリに置いた各 OS 向けの形式が、
-// 1024 px の原本から作ったものと一致することを確かめる（設計書 13 編 §13.4）。
+// TestGeneratedIconsMatchSource はリポジトリに置いた各 OS 向けの形式とロゴが、
+// 原画から作ったものと一致することを確かめる（設計書 13 編 §13.4）。
 //
-// 原本を変えて go run ./tools/gen-icon -derive を実行し忘れると失敗する。
+// 原画を変えて go run ./tools/gen-icon を実行し忘れると失敗する。
 // 縮小は浮動小数点で計算し、arm64 では積和の融合により amd64 と下位の桁が
 // 違うことがある。そのためバイト列ではなく、復号した画素の差で比べる。
 func TestGeneratedIconsMatchSource(t *testing.T) {
@@ -22,7 +23,7 @@ func TestGeneratedIconsMatchSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src, err := readPNG(filepath.Join(root, png1024))
+	src, err := readPNG(filepath.Join(root, sourcePath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +31,7 @@ func TestGeneratedIconsMatchSource(t *testing.T) {
 	if err := derive(src, tmp); err != nil {
 		t.Fatal(err)
 	}
-	files := []string{png256, icoPath, icnsPath}
+	files := []string{png256, macOSPNG, logoPNG, icoPath, icnsPath}
 	for _, size := range linuxSizes {
 		files = append(files, filepath.Join(linuxDir, fmt.Sprintf("icon-%d.png", size)))
 	}
@@ -41,11 +42,11 @@ func TestGeneratedIconsMatchSource(t *testing.T) {
 		}
 		got, err := os.ReadFile(filepath.Join(root, f))
 		if err != nil {
-			t.Errorf("%s が無い。go run ./tools/gen-icon -derive で作る", f)
+			t.Errorf("%s が無い。go run ./tools/gen-icon で作る", f)
 			continue
 		}
 		if err := sameImages(got, want); err != nil {
-			t.Errorf("%s が原本から作ったものと違う（%v）。go run ./tools/gen-icon -derive で作り直す", f, err)
+			t.Errorf("%s が原本から作ったものと違う（%v）。go run ./tools/gen-icon で作り直す", f, err)
 		}
 	}
 }
@@ -135,4 +136,30 @@ func embeddedPNGs(data []byte) [][]byte {
 		return out
 	}
 	return [][]byte{data}
+}
+
+// TestMacOSTileShape は macOS のタイルの外側が透明で、内側が不透明であることを確かめる。
+func TestMacOSTileShape(t *testing.T) {
+	square := image.NewNRGBA(image.Rect(0, 0, 64, 64))
+	for i := range square.Pix {
+		square.Pix[i] = 0xFF
+	}
+	tile := macOSTile(square)
+	off := (tileCanvas - tileSize) / 2
+	cases := []struct {
+		x, y  int
+		alpha uint8
+	}{
+		{0, 0, 0},                                  // 枠の隅（余白）
+		{off, off, 0},                              // 角丸の外側
+		{tileCanvas / 2, tileCanvas / 2, 0xFF},     // 中央
+		{off, tileCanvas / 2, 0xFF},                // 辺の中ほど
+		{off + tileSize - 1, tileCanvas / 2, 0xFF}, // 反対の辺
+		{tileCanvas - 1, tileCanvas - 1, 0},        // 反対の隅
+	}
+	for _, c := range cases {
+		if a := tile.NRGBAAt(c.x, c.y).A; a != c.alpha {
+			t.Errorf("(%d, %d) の不透明度 = %d, 期待 %d", c.x, c.y, a, c.alpha)
+		}
+	}
 }

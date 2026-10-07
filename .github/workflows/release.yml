@@ -47,7 +47,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows ${{ matrix.arch }}（.zip）
+    name: Windows ${{ matrix.arch }}（.msi と .zip）
     needs: test
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -84,18 +84,29 @@ jobs:
             export PATH="/c/msys64/clangarm64/bin:$PATH" CC=clang
           fi
           GOARCH=${{ matrix.arch }} tools/build.sh
-      - name: .zip を作る
+      # .msi は WiX Toolset v5 で作る（設計書 13 編 §13.6）。v6 以降は使わない
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: WiX Toolset v5 を導入する
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+          "$USERPROFILE/.dotnet/tools/wix" extension add --global WixToolset.UI.wixext/5.0.2
+      - name: .msi と .zip を作る
         run: >
           go run ./tools/package windows -version "$SHOGUN_VERSION" -arch ${{ matrix.arch }}
           -bin dist/windows_${{ matrix.arch }}/shogun.exe -out dist
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows-${{ matrix.arch }}
-          path: dist/*.zip
+          path: |
+            dist/*.msi
+            dist/*.zip
           if-no-files-found: error
 
   linux:
-    name: Linux ${{ matrix.arch }}（.tar.gz と AppImage）
+    name: Linux ${{ matrix.arch }}（.deb・.rpm・AppImage・.tar.gz）
     needs: test
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -132,7 +143,7 @@ jobs:
           echo "APPIMAGETOOL=$PWD/appimagetool" >> "$GITHUB_ENV"
       - name: ビルドする
         run: GOARCH=${{ matrix.arch }} tools/build.sh
-      - name: .tar.gz と AppImage を作る
+      - name: .deb・.rpm・AppImage・.tar.gz を作る
         # ランナーに FUSE が無いため、appimagetool を展開して実行する
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -143,6 +154,8 @@ jobs:
         with:
           name: release-linux-${{ matrix.arch }}
           path: |
+            dist/*.deb
+            dist/*.rpm
             dist/*.tar.gz
             dist/*.AppImage
           if-no-files-found: error
@@ -157,37 +170,47 @@ jobs:
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      # リリースノート（docs/releases/<タグ>.md）を読むために取得する
+      - uses: actions/checkout@v4
+        with:
+          path: repo
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
           path: assets
           merge-multiple: true
       - name: チェックサムとリリースノートを作る
-        working-directory: assets
         run: |
-          sha256sum * > SHA256SUMS.txt
-          cat > ../notes.md <<NOTES
-          ## 将軍エミュレータ ${TAG}
+          (cd assets && sha256sum * > SHA256SUMS.txt)
+          v="${TAG#v}"
+          notes="repo/docs/releases/${TAG}.md"
+          if [ -f "$notes" ]; then
+            cat "$notes" > notes.md
+          else
+            printf '## Shogun Emulator %s\n\n### 変更点\n\n- （ここに変更点を書く）\n' "$TAG" > notes.md
+          fi
+          cat >> notes.md <<NOTES
 
-          ### 変更点
+          ## ダウンロード / Downloads
 
-          - （ここに変更点を書く）
-
-          ### ダウンロード
-
-          | OS | ファイル |
-          |---|---|
-          | macOS 11 以降（Apple シリコン・Intel） | \`Shogun_Emulator-${TAG}-macos.dmg\` |
-          | Windows 10 以降（x64 / Arm64） | \`shogun-emulator-${TAG}-windows-amd64.zip\` / \`-arm64.zip\` |
-          | Linux（x86-64 / arm64） | \`Shogun_Emulator-${TAG}-x86_64.AppImage\` / \`-aarch64.AppImage\`、または \`.tar.gz\` |
+          | OS | インストーラ / Installer | そのほか / Others |
+          |---|---|---|
+          | macOS 11+（Apple シリコン・Intel） | \`Shogun_Emulator-${TAG}-macos.dmg\` | |
+          | Windows 10+（x64） | \`Shogun_Emulator-${TAG}-windows-x64.msi\` | \`shogun-emulator-${TAG}-windows-amd64.zip\` |
+          | Windows 10+（Arm64） | \`Shogun_Emulator-${TAG}-windows-arm64.msi\` | \`shogun-emulator-${TAG}-windows-arm64.zip\` |
+          | Linux x86-64（Debian・Ubuntu） | \`shogun-emulator_${v}-1_amd64.deb\` | \`Shogun_Emulator-${TAG}-x86_64.AppImage\`、\`shogun-emulator-${TAG}-linux-amd64.tar.gz\` |
+          | Linux x86-64（Fedora・RHEL・openSUSE） | \`shogun-emulator-${v}-1.x86_64.rpm\` | |
+          | Linux arm64（Debian・Ubuntu） | \`shogun-emulator_${v}-1_arm64.deb\` | \`Shogun_Emulator-${TAG}-aarch64.AppImage\`、\`shogun-emulator-${TAG}-linux-arm64.tar.gz\` |
+          | Linux arm64（Fedora・RHEL・openSUSE） | \`shogun-emulator-${v}-1.aarch64.rpm\` | |
 
           署名と公証をしていないため、初回の起動で macOS の Gatekeeper と Windows の SmartScreen の警告が出ます。回避の手順は同梱の \`USAGE.md\` にあります。
+          The binaries are not signed or notarized, so macOS Gatekeeper and Windows SmartScreen show a warning on first launch. See the bundled \`USAGE.md\` for how to open the app.
 
-          各ファイルの SHA-256 は \`SHA256SUMS.txt\` にあります。
+          各ファイルの SHA-256 は \`SHA256SUMS.txt\` にあります。 / SHA-256 checksums are in \`SHA256SUMS.txt\`.
           NOTES
       - name: 下書きを作る
         run: |
           flags="--draft"
           case "$TAG" in *-*) flags="$flags --prerelease" ;; esac
           gh release create "$TAG" $flags --repo "$GITHUB_REPOSITORY" \
-            --title "将軍エミュレータ $TAG" --notes-file notes.md assets/*
+            --title "Shogun Emulator $TAG" --notes-file notes.md assets/*

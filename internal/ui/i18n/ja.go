@@ -429,4 +429,5 @@ var ja = map[ID]string{
 	MacZoom:                 "拡大／縮小",
 	MacBringAllToFront:      "すべてを手前に移動",
 	MacEnterFullScreen:      "フルスクリーンにする",
+	AboutDetails:            "版 %s\nコミット %s\nビルド日時 %s",
 }

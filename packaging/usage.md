@@ -25,12 +25,24 @@ Linux で必要なものは、一般的なデスクトップ環境には最初�
 
 ### Windows
 
-1. `.zip` を展開し、`shogun.exe` をダブルクリックします。インストールは不要です。
-2. 初回に「Windows によって PC が保護されました」（SmartScreen）と表示されることがあります。署名をしていないためです。「詳細情報」を押し、「実行」を押すと起動します。
-3. コマンドプロンプトや PowerShell から `shogun.exe --version` のように引数付きで起動すると、出力がその画面に表示されます。
+インストーラ（`.msi`）を使う場合:
+
+1. お使いの PC に合った `.msi` をダブルクリックします。通常の PC は `windows-x64`、Arm の PC（Snapdragon など）は `windows-arm64` です。
+2. 「Windows によって PC が保護されました」（SmartScreen）と表示されたときは、「詳細情報」を押し、「実行」を押します。署名をしていないためです。
+3. 画面の指示に従ってインストールします。管理者の権限を求められます。スタートメニューに「Shogun Emulator」が登録され、`.nes` ファイルを開けるようになります。
+4. アンインストールは「設定」→「アプリ」→「インストールされているアプリ」から行います。新しい版の `.msi` を実行すると、古い版を置き換えます。
+
+インストールせずに使う場合:
+
+1. `.zip` を展開し、`shogun.exe` をダブルクリックします。
+2. 初回に SmartScreen が表示されたときは、上と同じ手順で起動します。
+
+コマンドプロンプトや PowerShell から `shogun.exe --version` のように引数付きで起動すると、出力がその画面に表示されます。インストーラで入れた場合、実行ファイルは `C:\Program Files\Shogun Emulator\shogun.exe` にあります。
 
 ### Linux
 
+- Debian・Ubuntu（`.deb`）：`sudo apt install ./shogun-emulator_<版>-1_amd64.deb` で入れます。Arm の PC では `arm64` のファイルを使います。アプリの一覧に「Shogun Emulator」が出て、端末からは `shogun` で起動します。
+- Fedora・RHEL・openSUSE（`.rpm`）：`sudo dnf install ./shogun-emulator-<版>-1.x86_64.rpm`（openSUSE は `sudo zypper install`）で入れます。
 - AppImage：ファイルに実行の許可を付けて（`chmod +x Shogun_Emulator-*.AppImage`）、ダブルクリックまたは端末から起動します。
 - 実行ファイル単体（`.tar.gz`）：展開した `shogun` を起動します。デスクトップの一覧とファイルの関連付けに登録するときは、`shogun` を `PATH` の通った場所（`~/.local/bin` など）へ置き、展開した `share/` の中身を `~/.local/share/` へ写してから `update-mime-database ~/.local/share/mime` を実行します。
 

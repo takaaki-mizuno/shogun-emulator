@@ -64,6 +64,7 @@ Phase 12 ── Phase 14  Agent Interface の基盤（JSON-RPC・Instance・Fork
 | [18](phase-18-agent-devloop.md) | 開発ループと再現（常時記録・SHGM v2 の介入レコード・`rom.reload`・ROM の監視・Re-Reach・Repro） | Repro の再生で最後のフレームの状態ハッシュが一致し、同じ ROM での Re-Reach が読み直す前と同じ状態ハッシュになる | 完了（常時記録（SHGM v2 の介入）・`record.status`・`rom.reload` と Re-Reach（frame・condition）・`rom.watch` と GUI の `agent.romWatchAction`・`repro.export` を実装。Repro の再生と Re-Reach で状態ハッシュが一致。GUI の目視の確認と CI の 3 OS 実行のみ未確認） |
 | [19](phase-19-agent-scenario.md) | Scenario とテスト実行（`shogun run`・アサーション・JUnit XML・`scenario.export`） | 合格で終了コード 0、失敗で終了コード 5 と JUnit XML と Repro を出し、`scenario.export` の Scenario を再実行して同じ結果になる | 完了 |
 | [20](phase-20-agent-analysis.md) | 解析（トレースの絞り込みと要約・プロファイル・Diagnostic） | Diagnostic 11 項目がテスト ROM で検知され、全機能を有効にしても決定論テストのハッシュが変わらず 60 fps を維持する | 完了 |
+| [21](phase-21-release-0.9.0.md) | リリース 0.9.0（アイコンの刷新・`.dmg` の改良・`.msi`・`.deb`・`.rpm`） | 新しいアイコンの各形式とアプリ内のロゴがそろい、`v0.9.0` のタグでリリースの下書きにすべての成果物が並ぶ | 進行中 |
 
 ## 進捗の更新方法
 

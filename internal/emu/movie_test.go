@@ -11,6 +11,42 @@ import (
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/input"
 )
 
+// playPaused は再生を始め、そのまま一時停止する。
+//
+// PlayMovie は再生を始めると一時停止を解く。その後に SetPaused(true) を
+// 送ると、届くまでの間にエミュレーションが進むフレーム数が実行のたびに
+// 変わる。エミュレーションゴルーチンの中で続けて止めることで、再生の開始の
+// 位置から runFrames で進めた分だけを進める。
+func playPaused(t *testing.T, e *Emulator, m *movie.Movie) {
+	t.Helper()
+	var err error
+	if !e.WithMachine(func(*nes.NES) {
+		if err = e.startPlayback(m); err == nil {
+			e.paused = true
+			e.setPaused(true)
+		}
+	}) {
+		t.Fatal("本体を参照できない")
+	}
+	if err != nil {
+		t.Fatalf("再生を始められない: %v", err)
+	}
+}
+
+// playFilePaused はファイルのムービーを playPaused で再生する。
+func playFilePaused(t *testing.T, e *Emulator, path string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := movie.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playPaused(t, e, m)
+}
+
 // recordSession は入力を変えながらムービーを記録し、最後の状態の
 // ハッシュとムービーのパスを返す。
 func recordSession(t *testing.T, e *Emulator, path string) [8]uint8 {
@@ -56,10 +92,7 @@ func TestMovieRecordAndReplay(t *testing.T) {
 	}
 
 	// 再生する。再生の終わりで記録時と同じ状態になる。
-	if err := e.PlayMovieFile(path); err != nil {
-		t.Fatalf("再生を始められない: %v", err)
-	}
-	e.SetPaused(true)
+	playFilePaused(t, e, path)
 	runFrames(t, e, int(m.Header.TotalFrames)-1)
 
 	if got := hashOf(t, e); got != want {
@@ -95,10 +128,7 @@ func TestMovieReplayIsRepeatable(t *testing.T) {
 
 	var hashes [2][8]uint8
 	for i := range hashes {
-		if err := e.PlayMovieFile(path); err != nil {
-			t.Fatalf("%d 回目の再生を始められない: %v", i+1, err)
-		}
-		e.SetPaused(true)
+		playFilePaused(t, e, path)
 		runFrames(t, e, 40)
 		hashes[i] = hashOf(t, e)
 	}
@@ -135,10 +165,7 @@ func TestMovieDetectsDesync(t *testing.T) {
 		t.Fatal("チェックサムが記録されていない")
 	}
 
-	if err := e.PlayMovie(m); err != nil {
-		t.Fatalf("再生を始められない: %v", err)
-	}
-	e.SetPaused(true)
+	playPaused(t, e, m)
 	runFrames(t, e, int(m.Header.TotalFrames))
 
 	err = e.DesyncError()

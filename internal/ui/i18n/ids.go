@@ -429,4 +429,5 @@ const (
 	MacZoom                 ID = "MacZoom"
 	MacBringAllToFront      ID = "MacBringAllToFront"
 	MacEnterFullScreen      ID = "MacEnterFullScreen"
+	AboutDetails            ID = "AboutDetails"
 )

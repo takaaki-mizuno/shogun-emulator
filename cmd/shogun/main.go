@@ -166,6 +166,7 @@ func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Wri
 	// Finder で開いた .nes を受け取れるよう、アプリケーションを作る前に登録する。
 	ui.InstallOpenFileHandler()
 	u := ui.New(e, store, version)
+	u.SetBuildDetails(commit, buildDate)
 	if opts.speed != 0 {
 		u.SetSpeed(opts.speed)
 	}

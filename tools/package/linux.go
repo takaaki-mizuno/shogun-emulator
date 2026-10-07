@@ -22,8 +22,9 @@ var linuxIconSizes = []int{16, 22, 24, 32, 48, 64, 128, 256, 512}
 // appImageArch は Go のアーキテクチャ名を AppImage の名前に直す。
 var appImageArch = map[string]string{"amd64": "x86_64", "arm64": "aarch64"}
 
-// packageLinux は .tar.gz を作り、appimage のとき AppImage も作る。
-func packageLinux(root, version, arch, bin, out string, appimage bool) ([]string, error) {
+// packageLinux は .tar.gz を作り、packages のとき .deb と .rpm を、appimage の
+// とき AppImage も作る（設計書 13 編 §13.7）。
+func packageLinux(root, version, arch, bin, out string, packages, appimage bool) ([]string, error) {
 	if bin == "" {
 		return nil, errors.New("-bin に shogun のパスを指定する")
 	}
@@ -52,6 +53,13 @@ func packageLinux(root, version, arch, bin, out string, appimage bool) ([]string
 		return nil, err
 	}
 	paths := []string{tarPath}
+	if packages {
+		pkgs, err := buildLinuxPackages(root, version, arch, exe, share, docs, out)
+		paths = append(paths, pkgs...)
+		if err != nil {
+			return paths, err
+		}
+	}
 	if !appimage {
 		return paths, nil
 	}

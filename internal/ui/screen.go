@@ -29,6 +29,8 @@ type screen struct {
 	img *canvas.Image
 	// overlay はスプライトの矩形を重ねる層。
 	overlay *spriteOverlay
+	// logo は ROM を開いていないときに中央に出すロゴ（設計書 10 編 §10.4）。
+	logo *canvas.Image
 	// content は画像と重ねる層をまとめたもの。
 	content fyne.CanvasObject
 	rgba    *image.RGBA
@@ -80,7 +82,10 @@ func newScreen(frames *emu.FrameBuffer, pal *video.Palette, cfg config.VideoConf
 	s.img.FillMode = canvas.ImageFillStretch
 	s.setFilter(cfg.Filter)
 	s.overlay = newSpriteOverlay(s.img)
-	s.content = container.New(&screenLayout{s: s}, s.img, s.overlay)
+	s.logo = canvas.NewImageFromResource(logoResource)
+	s.logo.FillMode = canvas.ImageFillContain
+	s.logo.ScaleMode = canvas.ImageScaleSmooth
+	s.content = container.New(&screenLayout{s: s}, s.img, s.overlay, s.logo)
 	return s
 }
 
@@ -132,10 +137,20 @@ func (l *screenLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	}
 	pos := fyne.NewPos((size.Width-w)/2, (size.Height-h)/2)
 	for _, o := range objects {
+		if o == l.s.logo {
+			// ロゴはゲーム画面の短い辺の 6 割の正方形にして中央に置く。
+			n := min(w, h) * logoRatio
+			o.Move(fyne.NewPos(pos.X+(w-n)/2, pos.Y+(h-n)/2))
+			o.Resize(fyne.NewSize(n, n))
+			continue
+		}
 		o.Move(pos)
 		o.Resize(fyne.NewSize(w, h))
 	}
 }
+
+// logoRatio はゲーム画面の短い辺に対するロゴの大きさの比。
+const logoRatio = 0.6
 
 // clampScale は拡大率を設定できる範囲に収める。
 func clampScale(v int) int {
@@ -243,6 +258,18 @@ func (s *screen) Clear() {
 	s.frame.Clear(blackPaletteValue)
 	s.pal.ApplyRect(s.frame, s.src, s.rgba)
 	s.img.Refresh()
+}
+
+// setLogoVisible はロゴの表示を切り替える。ROM を開いていないときに出す。
+func (s *screen) setLogoVisible(visible bool) {
+	if s.logo.Visible() == visible {
+		return
+	}
+	if visible {
+		s.logo.Show()
+	} else {
+		s.logo.Hide()
+	}
 }
 
 // blackPaletteValue は黒のパレット値。$0F が黒である（$0D は使わない）。

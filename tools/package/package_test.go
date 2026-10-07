@@ -46,10 +46,11 @@ func TestVersionNumber(t *testing.T) {
 // TestPackageWindowsZip は .zip に実行ファイルと同梱の文書が入ることを確かめる（設計書 13 編 §13.6）。
 func TestPackageWindowsZip(t *testing.T) {
 	out := t.TempDir()
-	path, err := packageWindows(testRoot(t), "v1.0.0", "amd64", fakeBinary(t, "shogun.exe"), out)
+	paths, err := packageWindows(testRoot(t), "v1.0.0", "amd64", fakeBinary(t, "shogun.exe"), out, false)
 	if err != nil {
 		t.Fatal(err)
 	}
+	path := paths[0]
 	if filepath.Base(path) != "shogun-emulator-v1.0.0-windows-amd64.zip" {
 		t.Errorf("名前 = %s", filepath.Base(path))
 	}
@@ -74,7 +75,7 @@ func TestPackageWindowsZip(t *testing.T) {
 func TestPackageLinuxTarGz(t *testing.T) {
 	root := testRoot(t)
 	out := t.TempDir()
-	paths, err := packageLinux(root, "v1.0.0", "arm64", fakeBinary(t, "shogun"), out, false)
+	paths, err := packageLinux(root, "v1.0.0", "arm64", fakeBinary(t, "shogun"), out, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ func TestPackageLinuxTarGz(t *testing.T) {
 			t.Errorf("AppDir に %s が無い", want)
 		}
 	}
-	if _, err := packageLinux(root, "v1.0.0", "arm64", fakeBinary(t, "shogun"), out, true); err == nil && os.Getenv("APPIMAGETOOL") == "" {
+	if _, err := packageLinux(root, "v1.0.0", "arm64", fakeBinary(t, "shogun"), out, false, true); err == nil && os.Getenv("APPIMAGETOOL") == "" {
 		t.Error("APPIMAGETOOL が無いのに AppImage を作れたことになっている")
 	}
 }
@@ -163,7 +164,9 @@ func TestThirdPartyLicenses(t *testing.T) {
 			t.Errorf("一覧に %s が無い", want)
 		}
 	}
-	if strings.Contains(text, "goversioninfo") {
-		t.Error("ビルド時だけの goversioninfo が一覧に入っている")
+	for _, tool := range []string{"goversioninfo", "nfpm"} {
+		if strings.Contains(text, tool) {
+			t.Errorf("ビルド時だけの %s が一覧に入っている", tool)
+		}
 	}
 }

@@ -1,6 +1,10 @@
-# Shogun Emulator
+<p align="center">
+  <img src="assets/icon.png" alt="Shogun Emulator" width="240">
+</p>
 
-[English](#english) | [日本語](#日本語)
+<h1 align="center">Shogun Emulator</h1>
+
+<p align="center"><a href="#english">English</a> | <a href="#日本語">日本語</a></p>
 
 ---
 
@@ -17,6 +21,18 @@ Shogun Emulator is an NES (Famicom) emulator for macOS, Windows, and Linux, writ
 | Play | Save states with slots, rewind, fast-forward, slow motion, frame advance, input movie recording and playback, screenshots |
 | Debugging | CPU debugger, breakpoints, step by cycle, instruction, scanline, or frame, memory viewer and editor, PPU and APU viewers, CPU trace log, ca65/ld65 `.dbg` symbols |
 | Automation | Headless mode, MCP server (`shogun mcp`), JSON-RPC server (`shogun serve`), scenario runner (`shogun run`) |
+
+### Installation
+
+Download the installer for your OS from [GitHub Releases](https://github.com/takaaki-mizuno/shogun-emulator/releases).
+
+| OS | File |
+|---|---|
+| macOS 11 or later (Apple silicon and Intel) | `.dmg`. Open it and drag **Shogun Emulator** to **Applications** |
+| Windows 10 or later (x64 and Arm64) | `.msi` installer, or `.zip` to run without installing |
+| Linux (x86-64 and arm64) | `.deb` (Debian, Ubuntu), `.rpm` (Fedora, RHEL, openSUSE), AppImage, or `.tar.gz` |
+
+The binaries are not signed. On first launch, macOS Gatekeeper and Windows SmartScreen show a warning. On macOS, Control-click the app and choose **Open**. On Windows, click **More info** and then **Run anyway**.
 
 ### Building
 
@@ -87,7 +103,15 @@ go test ./...
 
 ### Packaging
 
-`go run ./tools/package <macos|windows|linux>` creates a `.dmg` (macOS), a `.zip` (Windows), or a `.tar.gz` and an optional AppImage (Linux).
+`go run ./tools/package <macos|windows|linux>` creates the release files.
+
+| OS | Files | Tools |
+|---|---|---|
+| macOS | `.dmg` | `hdiutil` and `tiffutil` (run on macOS) |
+| Windows | `.msi` and `.zip` | [WiX Toolset](https://wixtoolset.org/) v5 for the `.msi` (run on Windows) |
+| Linux | `.deb`, `.rpm`, `.tar.gz`, and AppImage | nfpm (pinned in `go.mod`); `appimagetool` for the AppImage |
+
+Pushing a tag that starts with `v` builds all release files on GitHub Actions and creates a draft release.
 
 ### Documentation
 
@@ -119,6 +143,18 @@ AI エージェントなどのプログラムからも、Agent Interface（MCP �
 | プレイ | スロット付きのセーブステート、巻き戻し、早送り、スロー、コマ送り、入力ムービーの記録と再生、スクリーンショット |
 | デバッグ | CPU デバッガ、ブレークポイント、サイクル・命令・スキャンライン・フレーム単位のステップ実行、メモリビューアとエディタ、PPU と APU のビューア、CPU トレースログ、ca65/ld65 の `.dbg` のシンボル |
 | 自動化 | headless モード、MCP サーバ（`shogun mcp`）、JSON-RPC サーバ（`shogun serve`）、Scenario の実行（`shogun run`） |
+
+### インストール
+
+[GitHub Releases](https://github.com/takaaki-mizuno/shogun-emulator/releases) から OS に合ったファイルを取得します。
+
+| OS | ファイル |
+|---|---|
+| macOS 11 以降（Apple シリコン・Intel） | `.dmg`。開いて「Shogun Emulator」を「Applications」へドラッグする |
+| Windows 10 以降（x64・Arm64） | `.msi`（インストーラ）。インストールせずに使うときは `.zip` |
+| Linux（x86-64・arm64） | `.deb`（Debian・Ubuntu）、`.rpm`（Fedora・RHEL・openSUSE）、AppImage、`.tar.gz` |
+
+署名をしていないため、初回の起動で macOS の Gatekeeper と Windows の SmartScreen の警告が出ます。macOS ではアプリを Control キーを押しながらクリックして「開く」を選びます。Windows では「詳細情報」を押してから「実行」を押します。
 
 ### ビルド
 
@@ -191,11 +227,13 @@ go test ./...
 
 `go run ./tools/package <macos|windows|linux>` を実行すると、OS ごとに次の配布物を作ります。
 
-| OS | 配布物 |
-|---|---|
-| macOS | `.dmg` |
-| Windows | `.zip` |
-| Linux | `.tar.gz`（AppImage も作れる） |
+| OS | 配布物 | 使うツール |
+|---|---|---|
+| macOS | `.dmg` | `hdiutil`・`tiffutil`（macOS で実行する） |
+| Windows | `.msi`・`.zip` | `.msi` は [WiX Toolset](https://wixtoolset.org/) v5（Windows で実行する） |
+| Linux | `.deb`・`.rpm`・`.tar.gz`・AppImage | nfpm（`go.mod` で版を固定）。AppImage は `appimagetool` |
+
+`v` で始まるタグを push すると、GitHub Actions がすべての配布物を作り、リリースの下書きを作ります。
 
 ### ドキュメント
 

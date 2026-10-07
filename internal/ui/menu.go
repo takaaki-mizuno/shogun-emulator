@@ -1,12 +1,13 @@
 package ui
 
 import (
-	"fmt"
 	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 	"os"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
@@ -242,11 +243,24 @@ func (u *UI) settingsMenu() *fyne.Menu {
 
 // helpMenu はヘルプメニューを作る。
 func (u *UI) helpMenu() *fyne.Menu {
-	about := fyne.NewMenuItem(i18n.T(i18n.MenuAbout), func() {
-		dialog.ShowCustom(i18n.T(i18n.MenuAbout), i18n.T(i18n.CommonClose),
-			widget.NewLabel(fmt.Sprintf("%s\n%s", appTitle, u.version)), u.win)
-	})
+	about := fyne.NewMenuItem(i18n.T(i18n.MenuAbout), u.showAbout)
 	return fyne.NewMenu(i18n.T(i18n.MenuHelp), about)
+}
+
+// aboutLogoSize は「バージョン情報」のロゴの大きさ。
+const aboutLogoSize = 128
+
+// showAbout はロゴと版を並べた「バージョン情報」を出す（設計書 10 編 §10.5）。
+func (u *UI) showAbout() {
+	logo := canvas.NewImageFromResource(logoResource)
+	logo.FillMode = canvas.ImageFillContain
+	logo.ScaleMode = canvas.ImageScaleSmooth
+	logo.SetMinSize(fyne.NewSize(aboutLogoSize, aboutLogoSize))
+	title := widget.NewLabelWithStyle(appTitle, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	details := widget.NewLabelWithStyle(i18n.T(i18n.AboutDetails, u.version, u.commit, u.buildDate),
+		fyne.TextAlignCenter, fyne.TextStyle{})
+	dialog.ShowCustom(i18n.T(i18n.MenuAbout), i18n.T(i18n.CommonClose),
+		container.NewVBox(container.NewCenter(logo), title, details), u.win)
 }
 
 // setScale は拡大率を変え、ウィンドウの大きさを合わせる。

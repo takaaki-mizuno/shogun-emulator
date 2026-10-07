@@ -16,8 +16,20 @@ import _ "embed"
 var DefaultPalette []byte
 
 // Icon はアプリケーションのアイコン。256 ピクセル四方の PNG。
+// Windows と Linux のウィンドウのアイコンに使う。
 //
-// `go run ./tools/gen-icon` で生成する。
+// 原画 icon.png から `go run ./tools/gen-icon` で生成する。
 //
 //go:embed icon/icon.png
 var Icon []byte
+
+// IconMacOS は macOS 向けの角丸のタイルの形のアイコン。512 ピクセル四方の PNG。
+// .app に入れずに起動したときの Dock の表示に使う。
+//
+//go:embed icon/icon-macos.png
+var IconMacOS []byte
+
+// Logo はアプリ内に表示するロゴ。512 ピクセル四方の PNG。
+//
+//go:embed icon/logo.png
+var Logo []byte
