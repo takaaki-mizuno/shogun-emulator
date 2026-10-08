@@ -130,6 +130,16 @@ type UI struct {
 	settingsWin fyne.Window
 	// keyCapture はキーバインドの取り込み中であることを表す。ホットキーを止める。
 	keyCapture bool
+	// videoPath は録画中の動画のパス。保存したことを知らせるのに使う。
+	// 録画していないとき空。
+	videoPath string
+	// exports は実行中の動画の書き出し。アプリの終了で取り消して待つ。
+	exports exportTracker
+	// closing はウィンドウを閉じる処理が始まったことを表す。その後に
+	// UI スレッドへ渡した処理は、呼び出し元のゴルーチンで走りうるため
+	// 部品に触らない（dispatch.go）。
+	closing atomic.Bool
+
 	// agentUI は Agent Interface の表示と状態。
 	agentUI agentUI
 }
@@ -207,6 +217,10 @@ func (u *UI) Run() {
 	u.applyTheme()
 
 	u.win.SetOnClosed(func() {
+		// 書き出しを取り消し、書きかけのファイルを消し終えるまで待つ
+		// （設計書 08 編 §8.8.4）。この後に UI スレッドへ渡された処理は部品に触らない。
+		u.closing.Store(true)
+		u.exports.cancelAndWait()
 		u.closeAgent()
 		u.stopRefreshing()
 		u.saveWindowStates()
@@ -404,6 +418,9 @@ func (u *UI) refresh() {
 	u.checkDesync()
 	u.refreshAgent()
 	st := u.emu.Status()
+	// 書き込みの失敗などで録画が止まった。保存したとは知らせず、失敗の
+	// ときはエラーを出す。
+	u.showError(u.videoStopped(st))
 	u.screen.setLogoVisible(!st.Loaded)
 	u.status.update(st)
 	u.refreshViewers()

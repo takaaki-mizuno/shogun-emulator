@@ -41,16 +41,26 @@ func (u *UI) stateMenu() *fyne.Menu {
 		slot, list, fyne.NewMenuItemSeparator(), saveAs, loadFrom)
 }
 
-// movieMenu はムービーメニューを作る。
-func (u *UI) movieMenu() *fyne.Menu {
-	record := fyne.NewMenuItem(i18n.T(i18n.MenuStartRecording), u.startRecordingMovie)
-	stopRecord := fyne.NewMenuItem(i18n.T(i18n.MenuStopRecording), func() {
-		u.showError(u.emu.StopRecordingMovie())
-	})
-	play := fyne.NewMenuItem(i18n.T(i18n.MenuPlayMovie), u.playMovie)
-	stop := fyne.NewMenuItem(i18n.T(i18n.MenuStop), func() { u.showError(u.emu.StopMovie()) })
-
-	return fyne.NewMenu(i18n.T(i18n.MenuMovie), record, stopRecord, fyne.NewMenuItemSeparator(), play, stop)
+// recordMenu は「記録」メニューを作る（設計書 10 編 §10.5）。「操作の記録」は
+// 入力ムービー、「録画」は動画の書き出しである。
+func (u *UI) recordMenu() *fyne.Menu {
+	op := fyne.NewMenuItem(i18n.T(i18n.MenuOperationRecord), nil)
+	op.ChildMenu = fyne.NewMenu("",
+		fyne.NewMenuItem(i18n.T(i18n.MenuStartRecording), u.startRecordingMovie),
+		fyne.NewMenuItem(i18n.T(i18n.MenuStopRecording), func() { u.showError(u.emu.StopRecordingMovie()) }),
+	)
+	play := fyne.NewMenuItem(i18n.T(i18n.MenuOperationPlay), nil)
+	play.ChildMenu = fyne.NewMenu("",
+		fyne.NewMenuItem(i18n.T(i18n.MenuPlayMovie), u.playMovie),
+		fyne.NewMenuItem(i18n.T(i18n.MenuStop), func() { u.showError(u.emu.StopMovie()) }),
+	)
+	vid := fyne.NewMenuItem(i18n.T(i18n.MenuVideo), nil)
+	vid.ChildMenu = fyne.NewMenu("",
+		fyne.NewMenuItem(i18n.T(i18n.MenuVideoStart), u.startRecordingVideo),
+		fyne.NewMenuItem(i18n.T(i18n.MenuVideoStop), u.stopRecordingVideo),
+		fyne.NewMenuItem(i18n.T(i18n.MenuVideoExport), u.exportVideo),
+	)
+	return fyne.NewMenu(i18n.T(i18n.MenuMovie), op, play, vid)
 }
 
 // quickSave は選択中のスロットへ保存する。

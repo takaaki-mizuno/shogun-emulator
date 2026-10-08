@@ -55,6 +55,7 @@ func (c *Config) Validate() []string {
 
 	v := &c.Video
 	intRange("video.scale", &v.Scale, d.Video.Scale, MinScale, MaxScale)
+	intRange("video.recordScale", &v.RecordScale, d.Video.RecordScale, MinRecordScale, MaxRecordScale)
 	intRange("video.overscanTop", &v.OverscanTop, d.Video.OverscanTop, 0, MaxOverscan)
 	intRange("video.overscanBottom", &v.OverscanBottom, d.Video.OverscanBottom, 0, MaxOverscan)
 	intRange("video.overscanLeft", &v.OverscanLeft, d.Video.OverscanLeft, 0, MaxOverscan)

@@ -17,6 +17,10 @@ func (e *Emulator) run() {
 	defer close(e.done)
 	// 終了時に書き出していないセーブデータを残さない。
 	defer e.closeBattery()
+	// 終了時に録画を閉じる。閉じずに終わると moov が書かれず再生できない
+	// （設計書 08 編 §8.8.4）。Stop の後はコマンドが届かないため、
+	// ゴルーチンの終わりで閉じる。
+	defer func() { e.notifyError(e.closeVideo(false)) }()
 	defer e.saveSymbols()
 	defer e.closeTraceFile()
 	defer e.storeOverlay()
@@ -164,15 +168,23 @@ func (e *Emulator) runSteps(kind StepKind, count int) {
 	e.updateStatus()
 }
 
-// apuOutput は APU の出力先を返す。音声が無効のとき nil を返す。
+// apuOutput は APU の出力先を返す。音声が無効で録画もしていないとき nil を返す。
+// 録画中は音声出力の経路と録画の両方へ分けて渡す（設計書 08 編 §8.8.2）。
 //
 // nil を返すために型を明示する。*audioPipeline の nil をそのまま
 // interface に入れると、nil でない interface になってしまう。
 func (e *Emulator) apuOutput() apu.Output {
-	if e.audio == nil {
-		return nil
+	var out apu.Output
+	if e.audio != nil {
+		out = e.audio
 	}
-	return e.audio
+	if e.video == nil {
+		return out
+	}
+	if out == nil {
+		return e.video
+	}
+	return apuTee{out, e.video}
 }
 
 // notifyError は続行できる不具合を知らせる。
@@ -226,12 +238,18 @@ func (e *Emulator) publishFrame() {
 	e.lastFrame.CopyFrom(f)
 	e.hasFrame = true
 	e.Frames.Put(f)
+	if e.video != nil {
+		e.recordFrame(f)
+	}
 }
 
 // handle はコマンド 1 つを処理する。
 func (e *Emulator) handle(c command) {
 	switch v := c.(type) {
 	case cmdLoadMachine:
+		// ROM を替える前に録画を閉じる。リージョンの違う画が同じ動画に
+		// 混ざらないようにする（設計書 08 編 §8.8.4）。
+		e.notifyError(e.closeVideo(false))
 		e.cancelPending()
 		e.saveSymbols()
 		e.storeOverlay()
@@ -269,6 +287,7 @@ func (e *Emulator) handle(c command) {
 		v.done <- nil
 
 	case cmdUnload:
+		e.notifyError(e.closeVideo(false))
 		e.cancelPending()
 		e.saveSymbols()
 		e.storeOverlay()
@@ -319,6 +338,12 @@ func (e *Emulator) handle(c command) {
 		}
 		e.updateStatus()
 		v.done <- nil
+
+	case cmdStartVideo:
+		v.done <- e.startVideo(v)
+
+	case cmdStopVideo:
+		v.done <- e.stopVideo(v.abort)
 
 	case cmdSetInput:
 		e.Input.Set(v.port, v.buttons)

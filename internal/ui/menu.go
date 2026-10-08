@@ -34,7 +34,7 @@ func (u *UI) buildMainMenu() *fyne.MainMenu {
 		u.fileMenu(),
 		u.runMenu(),
 		u.stateMenu(),
-		u.movieMenu(),
+		u.recordMenu(),
 		u.viewMenu(),
 		u.debugMenu(),
 		u.aiMenu(),
@@ -338,6 +338,7 @@ func (u *UI) afterROMChange() {
 		u.win.Resize(u.preferredSize())
 	}
 	u.releaseAllKeys()
+	u.noteVideoClosed(s)
 }
 
 // addRecent は最近使った ROM の一覧の先頭へ加え、設定に保存する。

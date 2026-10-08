@@ -134,7 +134,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
-            libxinerama-dev libxxf86vm-dev xorg-dev libasound2-dev file
+            libxinerama-dev libxxf86vm-dev xorg-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols libasound2-dev file
       - name: appimagetool を取得する
         run: |
           curl -fsSL -o appimagetool \

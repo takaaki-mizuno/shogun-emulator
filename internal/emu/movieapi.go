@@ -27,33 +27,76 @@ func (e *Emulator) StopRecordingMovie() error {
 	return e.apply(cmdStopRecording{done: make(chan error, 1)})
 }
 
-// PlayMovieFile はファイルからムービーを読み込んで再生する。
+// readMovieFile はファイルからムービーを読み込む。
 //
-// ファイルの読み込みと解析を呼び出し側のゴルーチンで行う。実行中の
-// エミュレーションを止めないためである。
-func (e *Emulator) PlayMovieFile(path string) error {
-	// Repro のディレクトリ（<名前>.repro）を渡されたら中の repro.shgm を使う。
+// Repro のディレクトリ（<名前>.repro）を渡されたら中の repro.shgm を使う。
+func readMovieFile(path string) (*movie.Movie, error) {
 	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
 		p := filepath.Join(path, "repro.shgm")
 		if _, err := os.Stat(p); err != nil {
-			return errReproDir
+			return nil, errReproDir
 		}
 		path = p
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	m, err := movie.Decode(data)
 	if err != nil {
-		return fmt.Errorf("%s: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	return m, nil
+}
+
+// PlayMovieFile はファイルからムービーを読み込んで再生する。
+//
+// ファイルの読み込みと解析を呼び出し側のゴルーチンで行う。実行中の
+// エミュレーションを止めないためである。
+func (e *Emulator) PlayMovieFile(path string) error {
+	m, err := readMovieFile(path)
+	if err != nil {
+		return err
 	}
 	return e.PlayMovie(m)
+}
+
+// PlayMovieFilePaused はファイルからムービーを読み込んで再生を始め、
+// そのまま一時停止する。
+//
+// PlayMovieFile は再生を始めると一時停止を解く。その後に SetPaused(true) を
+// 送ると、届くまでに進むフレーム数が実行のたびに変わる。headless の実行と
+// 動画の書き出しは、再生の開始の位置から数えて正確に進める必要がある。
+func (e *Emulator) PlayMovieFilePaused(path string) error {
+	m, err := readMovieFile(path)
+	if err != nil {
+		return err
+	}
+	return e.playMoviePaused(m)
 }
 
 // PlayMovie は読み込み済みのムービーを再生する。
 func (e *Emulator) PlayMovie(m *movie.Movie) error {
 	return e.apply(cmdPlayMovie{m: m, done: make(chan error, 1)})
+}
+
+// playMoviePaused はエミュレーションゴルーチンの中で再生を始め、そのまま
+// 一時停止する。
+//
+// 再生を始めると一時停止を解くため、別のコマンドとして一時停止を送ると
+// 届くまでに進むフレーム数が実行のたびに変わる。同じ命令境界の中で続けて
+// 止めることで、再生の開始の位置から数えて正確に進められるようにする。
+func (e *Emulator) playMoviePaused(m *movie.Movie) error {
+	var playErr error
+	if !e.WithMachine(func(*nes.NES) {
+		if playErr = e.startPlayback(m); playErr == nil {
+			e.paused = true
+			e.setPaused(true)
+		}
+	}) {
+		return errStopped
+	}
+	return playErr
 }
 
 // StopMovie は記録と再生を止める。

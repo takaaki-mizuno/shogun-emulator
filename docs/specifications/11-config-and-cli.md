@@ -30,6 +30,7 @@
 | `SHOGUN_SCREENSHOT_DIR` | `paths.screenshotDir` |
 | `SHOGUN_LOG_DIR` | `paths.logDir` |
 | `SHOGUN_MOVIE_DIR` | `paths.movieDir` |
+| `SHOGUN_VIDEO_DIR` | `paths.videoDir` |
 | `SHOGUN_LOG` | `debug.logOutput` |
 | `SHOGUN_LOG_CATEGORIES` | `debug.logCategories`（カンマ区切り） |
 | `SHOGUN_AGENT` | `agent.enabled`（`1` で有効） |
@@ -59,11 +60,12 @@ type Paths struct {
     Cache       string
     Logs        string
     Screenshots string
+    Videos      string // 録画した動画
 }
 
 // Overrides は環境変数と引数で指定された保存先。空の項目は既定の場所を使う。
 type Overrides struct {
-    Config, Data, Logs, Screenshots string
+    Config, Data, Logs, Screenshots, Videos string
 }
 
 func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
@@ -78,6 +80,7 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 | キャッシュ | `~/Library/Caches/ShogunEmulator/` | `%LocalAppData%\ShogunEmulator\cache\` | `~/.cache/shogun-emulator/` |
 | ログ | `~/Library/Logs/ShogunEmulator/` | `%LocalAppData%\ShogunEmulator\logs\` | `~/.local/state/shogun-emulator/logs/` |
 | スクリーンショット | `~/Pictures/ShogunEmulator/` | `%UserProfile%\Pictures\ShogunEmulator\` | `~/Pictures/ShogunEmulator/` |
+| 動画 | `~/Movies/ShogunEmulator/` | `%UserProfile%\Videos\ShogunEmulator\` | `~/Videos/ShogunEmulator/` |
 
 設定とキャッシュは `os.UserConfigDir` と `os.UserCacheDir` から求める。これらがエラーを返したときは、ホームディレクトリ直下の `.shogun-emulator` を代わりに使う。ホームディレクトリも求められないときはエラーを返す。Linux のデータディレクトリは `$XDG_DATA_HOME`、未設定なら `$HOME/.local/share` とする。Go の標準ライブラリに対応する関数がないため自身で実装する。Linux のログディレクトリは `$XDG_STATE_HOME`、未設定なら `$HOME/.local/state` とする。
 
@@ -107,7 +110,7 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 
 `<rom-hash>` はヘッダを除いた PRG-ROM と CHR-ROM の SHA-1 の先頭 16 桁を 16 進で表した文字列とする。ヘッダを含めないのは、同じゲームのダンプでヘッダの内容が異なる場合があり、含めると別のゲームとして扱われるためである。
 
-`ResolvePaths` は求めたディレクトリのうち、設定・データ・ログを作る。スクリーンショットとキャッシュのディレクトリは使うときに作る。
+`ResolvePaths` は求めたディレクトリのうち、設定・データ・ログを作る。スクリーンショット・動画・キャッシュのディレクトリは使うときに作る。
 
 ### 11.2.1 ポータブルモード
 
@@ -119,6 +122,7 @@ func ResolvePaths(portable bool, overrides Overrides) (Paths, error)
 | キャッシュ | 同 `cache/` |
 | ログ | 同 `logs/` |
 | スクリーンショット | 同 `screenshots/` |
+| 動画 | 同 `videos/` |
 
 上書き（`Overrides`）はポータブルモードより優先する。
 
@@ -194,6 +198,7 @@ type VideoConfig struct {
     OverscanRight         int    `json:"overscanRight"`
     PaletteFile           string `json:"paletteFile"`
     Fullscreen            bool   `json:"fullscreen"`
+    RecordScale           int    `json:"recordScale"`            // 録画の拡大率
 }
 
 type AudioConfig struct {
@@ -223,6 +228,7 @@ type PathsConfig struct {
     ScreenshotDir string `json:"screenshotDir"`
     LogDir        string `json:"logDir"`
     MovieDir      string `json:"movieDir"`
+    VideoDir      string `json:"videoDir"`
 }
 
 type DebugConfig struct {
@@ -298,6 +304,7 @@ type AgentConfig struct {
 | `video.scale` | 3 | 768×720 になる |
 | `video.filter` | `nearest` | 拡大時にドットがぼけない |
 | `video.overscanTop` / `overscanBottom` | 8 | 画面端の描画をゲームが整えていない場合がある |
+| `video.recordScale` | 2 | 幅が 512 になる（既定のオーバースキャンでは 512×448）。3 倍の半分弱の大きさで、全画面で再生しても粗さが目立ちにくい（「08 セーブステートと入力ムービー設計」§8.8.1） |
 | `video.fullscreen` | `false` | 起動時にフルスクリーンにするかを表す。F11 やメニューでの切り替えはこの値を変えない |
 | `audio.sampleRate` | 48000 | リサンプル段が 1 つ減る |
 | `audio.bufferMilliseconds` | 25 | 高水位 2 倍で合計 50 ms に収まる |
@@ -337,6 +344,7 @@ type AgentConfig struct {
 | `emulation.mmc3IrqVariant` | `sharp`・`nec` |
 | `emulation.busConflicts` | `auto`・`always`・`never` |
 | `video.scale` | 1–8 |
+| `video.recordScale` | 1–3 |
 | `video.overscan*` | 0–16 |
 | `video.filter` | `nearest`・`linear` |
 | `audio.bufferMilliseconds` | 5–200 |
@@ -422,6 +430,7 @@ ROM ファイルを引数に渡すと、それを開いて GUI を起動する�
 | `--save-state-on-exit PATH` | 終了時にセーブステートを保存する |
 | `--movie PATH` | 入力ムービーを再生する |
 | `--record-movie PATH` | 入力ムービーを記録する |
+| `--record-video PATH` | 動画（MP4）を録画する。終了時に閉じる（「08 セーブステートと入力ムービー設計」§8.8） |
 | `--movie-verify`, `--no-movie-verify` | ムービー再生時のチェックサム検証を切り替える（`movie.verifyChecksums`） |
 | `--ram-init {zero,ff,pattern,random}` | RAM の初期化パターンを指定する |
 | `--ram-seed N` | RAM 初期化の乱数シードを指定する |
@@ -438,7 +447,7 @@ ROM ファイルを引数に渡すと、それを開いて GUI を起動する�
 | `--frames N` | N フレーム実行して終了する |
 | `--screenshot PATH` | 終了時にスクリーンショットを PNG で保存する |
 
-引数が不正なとき、および ROM を指定せずに `--headless` を指定したときは、理由を表示して終了コード 2 で終える。`--help` の出力はオプションを「表示と音声」「保存先」「ステートとムービー」「決定論」「デバッグ」「AI」「headless」に分けて並べる。`--agent` と `--agent-listen` は「AI」に置く。サブコマンドの一覧（§11.5.4）をヘルプの末尾に示す。
+引数が不正なとき、および ROM を指定せずに `--headless` を指定したときは、理由を表示して終了コード 2 で終える。`--help` の出力はオプションを「表示と音声」「保存先」「ステートとムービー」「決定論」「デバッグ」「AI」「headless」に分けて並べる。`--agent` と `--agent-listen` は「AI」に、`--record-video` は「ステートとムービー」に置く。サブコマンドの一覧（§11.5.4）をヘルプの末尾に示す。
 
 ### 11.5.2 headless モード
 
@@ -453,6 +462,7 @@ func runHeadless(cfg *config.Config, opts headlessOptions) int
 | `--headless --frames N --screenshot PATH` | 指定フレーム数実行して画面を保存する |
 | `--headless --trace-log PATH --frames N` | CPU トレースを取得する |
 | `--headless --movie PATH` | ムービーを再生して desync を検査する |
+| `--headless --movie PATH --record-video OUT` | ムービーを終わりまで再生し、動画を書き出す。`--frames` を指定したときはそのフレーム数で止める |
 
 headless モードではオーディオデバイスを開かない。進行の駆動をオーディオに依存させず、可能な速度で実行する。 ROM は一時停止した状態で読み込み、`--frames` のフレーム数だけ進める。読み込んだ直後から進むと、`--frames` の数とトレースの先頭が実行ごとに変わるためである。設定ファイルへは書かない。
 
@@ -467,6 +477,8 @@ headless モードではオーディオデバイスを開かない。進行の�
 | 4 | テスト ROM が失敗を報告した |
 | 5 | Scenario のアサーションが失敗した（`shogun run`） |
 | 6 | Scenario ファイルが不正である（`shogun run`） |
+
+headless で `--record-video` の録画が書き込みの失敗で止まったとき、または閉じられなかったときは、エラーを標準エラーに出してコード 1 で終える。動画が残らないため成功とはしない。ムービーの desync（3）を検出していたときはそちらを返す。
 
 ### 11.5.3 Windows でのコンソール接続
 

@@ -38,6 +38,7 @@ type options struct {
 	saveStateOnExit string
 	moviePath       string
 	recordMovie     string
+	recordVideo     string
 	movieVerify     bool
 	noMovieVerify   bool
 
@@ -72,7 +73,7 @@ var flagGroups = []struct {
 	{"全般", []string{"help", "version", "config", "portable"}},
 	{"表示と音声", []string{"region", "scale", "fullscreen", "no-audio", "audio-buffer", "sample-rate", "speed"}},
 	{"保存先", []string{"save-dir", "state-dir"}},
-	{"ステートとムービー", []string{"load-state", "save-state-on-exit", "movie", "record-movie", "movie-verify", "no-movie-verify"}},
+	{"ステートとムービー", []string{"load-state", "save-state-on-exit", "movie", "record-movie", "record-video", "movie-verify", "no-movie-verify"}},
 	{"決定論", []string{"ram-init", "ram-seed", "deterministic"}},
 	{"デバッグ", []string{"debug", "log", "log-dir", "log-categories", "trace-log", "break-at"}},
 	{"AI", []string{"agent", "agent-listen"}},
@@ -105,6 +106,7 @@ func parseArgs(args []string, stderr io.Writer) (options, int, bool) {
 	fs.StringVar(&opts.saveStateOnExit, "save-state-on-exit", "", "終了時にセーブステートを保存する")
 	fs.StringVar(&opts.moviePath, "movie", "", "入力ムービーを再生する")
 	fs.StringVar(&opts.recordMovie, "record-movie", "", "入力ムービーを記録する")
+	fs.StringVar(&opts.recordVideo, "record-video", "", "動画（MP4）を録画する")
 	fs.BoolVar(&opts.movieVerify, "movie-verify", false, "ムービー再生時にチェックサムを検証する")
 	fs.BoolVar(&opts.noMovieVerify, "no-movie-verify", false, "ムービー再生時にチェックサムを検証しない")
 	fs.StringVar(&opts.ramInit, "ram-init", "", "RAM の初期化パターン（zero, ff, pattern, random）")

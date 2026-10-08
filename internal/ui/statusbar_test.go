@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"github.com/takaakimizuno/shogun-emulator/internal/emu"
+	"github.com/takaakimizuno/shogun-emulator/internal/ui/i18n"
 )
 
 // TestStatusBarShowsRunState はステータスバーに設計書 10 編 §10.1 の
@@ -112,5 +113,30 @@ func TestSpeedTextShowsUncapped(t *testing.T) {
 		if got := speedText(tt.speed); got != tt.want {
 			t.Errorf("speedText(%v) = %q, 期待 %q", tt.speed, got, tt.want)
 		}
+	}
+}
+
+// TestVideoText は録画中の経過時間の表示を確かめる（設計書 10 編 §10.1）。
+func TestVideoText(t *testing.T) {
+	s := emu.Status{Video: emu.VideoStatus{Recording: true, Frames: 3725, FrameRate: 60}}
+	if got, want := videoText(s), i18n.T(i18n.StatusVideoRecording, 1, 2); got != want {
+		t.Errorf("videoText = %q、期待 %q", got, want)
+	}
+	if got := videoText(emu.Status{}); got != "" {
+		t.Errorf("録画していないときの表示 = %q", got)
+	}
+}
+
+// TestStatusBarShowsVideoRecording はステータスバーに録画中の経過時間が
+// 出ることを確かめる。
+func TestStatusBarShowsVideoRecording(t *testing.T) {
+	test.NewApp()
+	b := newStatusBar(emu.NewFrameBuffer())
+	s := emu.Status{
+		Loaded: true, ROMName: "smb", Speed: 1,
+		Video: emu.VideoStatus{Recording: true, Frames: 300, FrameRate: 60},
+	}
+	if text := b.text(s); !strings.Contains(text, "● 録画中 0:05") {
+		t.Errorf("録画中の表示が無い: %s", text)
 	}
 }

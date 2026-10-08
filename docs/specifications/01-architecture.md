@@ -53,6 +53,7 @@ internal/emu/            ライフサイクル。ロード、実行、ステッ�
 internal/debug/          ブレークポイント、逆アセンブラ、トレース、変更追跡
 internal/audio/          リングバッファ、リサンプラ、oto への出力
 internal/video/          フレームバッファ、パレット適用、拡大
+  mp4rec/                動画（MP4）の書き出し
 internal/ui/             GUI。Fyne への依存をここに閉じる
 internal/config/         設定ファイル、キーバインド、パス解決
 internal/testrom/        テスト ROM ランナー
@@ -131,6 +132,8 @@ graph TD
 `internal/nes` が依存するのは Go 標準ライブラリと `internal/nes/state`・`internal/video` のみである。これにより、コアをテストするときに GUI とオーディオデバイスを必要としない。
 
 `internal/video` はフレームバッファの型とその表示への変換だけを持つ葉のパッケージであり、`internal/` 以下のどのパッケージも参照しない。PPU が書き、表示側が読む受け渡しの場であるため、どちらの側にも依存させない。パレット値から RGB への変換はエンファシスを赤・緑・青の順に並んだ 3 bit として受け取る。PPU が `region.Region` の並びからこの順へ正規化して `Frame` へ書くため、`internal/video` は `internal/nes/region` を参照しない。
+
+`internal/video/mp4rec` は動画の書き出し（「08 セーブステートと入力ムービー設計」§8.8）を持ち、`internal/video` と `github.com/Eyevinn/mp4ff` だけを参照する。`internal/emu` が録画のときに使う。`internal/video` 自身は葉のまま保つため、mp4ff への依存を下位のパッケージに分ける。
 
 `assets` は実行ファイルへ埋め込むデータだけを持ち、`embed` 以外を参照しない。埋め込みの宣言は参照するファイルと同じディレクトリ以下にしか書けないため、使う側のパッケージではなくデータの置き場所に宣言を置く。`internal/video` が既定のパレットのためにこれを参照する。
 

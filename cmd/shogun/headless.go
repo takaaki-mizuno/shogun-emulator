@@ -65,7 +65,7 @@ func runHeadless(store *config.Store, opts options, logOut io.Writer, stdout, st
 
 	frames := opts.frames
 	if opts.moviePath != "" {
-		if err := e.PlayMovieFile(opts.moviePath); err != nil {
+		if err := e.PlayMovieFilePaused(opts.moviePath); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
 			return exitROMError
 		}
@@ -77,6 +77,12 @@ func runHeadless(store *config.Store, opts options, logOut io.Writer, stdout, st
 		if err := e.StartRecordingMovie(opts.recordMovie); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
 			return exitROMError
+		}
+	}
+	if opts.recordVideo != "" {
+		if err := e.StartRecordingVideo(opts.recordVideo, recordPalette(cfg), cfg.Video.RecordScale, videoOverscan(cfg)); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+			return exitBadArgs
 		}
 	}
 	if frames <= 0 {
@@ -93,6 +99,17 @@ func runHeadless(store *config.Store, opts options, logOut io.Writer, stdout, st
 	if opts.recordMovie != "" {
 		if err := e.StopRecordingMovie(); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+		}
+	}
+	if opts.recordVideo != "" {
+		// 途中の書き込みの失敗（設計書 08 編 §8.8.3）もここで返る。動画は
+		// 残っていないため、成功として終えない。食い違い（3）を見つけて
+		// いたときはそちらを優先する。
+		if err := e.StopRecordingVideo(); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+			if code == exitOK {
+				code = exitROMError
+			}
 		}
 	}
 	if opts.saveStateOnExit != "" {

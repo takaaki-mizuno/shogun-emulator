@@ -75,14 +75,29 @@ Linux で必要なものは、一般的なデスクトップ環境には最初�
 | スクリーンショット | F12 |
 | フルスクリーンの切り替え | F11 |
 
+## 録画と操作の記録
+
+「記録」メニューに 3 つの機能があります。
+
+| 機能 | 内容 |
+|---|---|
+| 操作の記録・操作の再生 | ボタンの操作だけを記録したファイル（`.movie`）を作り、再生します。ファイルは小さく、このエミュレータと同じ ROM で再生すると、画も音もそのとおりに再現します。動画プレイヤーでは開けません |
+| 録画 | 画面と音を動画（MP4）に保存します。QuickTime Player などで再生できます。拡大率は設定の「録画の拡大率」（1〜3 倍、既定 2 倍）で変えられます |
+| 操作の記録から書き出す | 保存した操作の記録を、実時間より速く動画にします。記録したときと同じ ROM を開いてから使います |
+
+動画は Motion JPEG という形式で、ファイルが大きくなります（2 倍で 1 分あたり数十 MB）。早送りやスローで遊んだ部分も、動画では等速になります。
+
+コマンドラインからは `shogun --headless --movie 記録.movie --record-video 出力.mp4 ゲーム.nes` で、画面を出さずに操作の記録から動画を作れます。
+
 ## 設定とセーブデータの保存先
 
 | 内容 | macOS | Windows | Linux |
 |---|---|---|---|
 | 設定（`config.json`・`keybindings.json`） | `~/Library/Application Support/ShogunEmulator/` | `%AppData%\ShogunEmulator\` | `~/.config/shogun-emulator/` |
-| セーブデータ・ステート・ムービー | 同上 | 同上 | `~/.local/share/shogun-emulator/` |
+| セーブデータ・ステート・操作の記録 | 同上 | 同上 | `~/.local/share/shogun-emulator/` |
 | ログ | `~/Library/Logs/ShogunEmulator/` | `%LocalAppData%\ShogunEmulator\logs\` | `~/.local/state/shogun-emulator/logs/` |
 | スクリーンショット | `~/Pictures/ShogunEmulator/` | `%UserProfile%\Pictures\ShogunEmulator\` | `~/Pictures/ShogunEmulator/` |
+| 録画した動画 | `~/Movies/ShogunEmulator/` | `%UserProfile%\Videos\ShogunEmulator\` | `~/Videos/ShogunEmulator/` |
 
 実行ファイルと同じ場所に `portable.txt` という名前のファイルを置くか、`--portable` を付けて起動すると、実行ファイルの場所に設定とデータを保存します（USB メモリなどに入れて持ち運ぶとき）。
 
@@ -101,6 +116,7 @@ Linux で必要なものは、一般的なデスクトップ環境には最初�
 | `--debug` | CPU デバッガを開き、一時停止した状態で起動する |
 | `--log file --log-categories mapper,ppu.register` | 指定したカテゴリのログをファイルへ出す |
 | `--headless --frames 60 --screenshot out.png` | 画面を出さずに 60 フレーム実行し、画面を保存する |
+| `--record-video PATH` | 動画（MP4）を録画する |
 
 ## AI から使う
 
@@ -222,7 +238,7 @@ shogun run tests/*.yaml --junit report.xml --repro-dir repros
 | 5 | アサーションが失敗した |
 | 6 | Scenario ファイルが正しくない（ファイル名・行番号・ステップの番号を出します） |
 
-失敗すると、失敗したステップ・式・実際の値を表示し、その場面を再現する Repro（`repro.shgm` など）を書き出します。Repro は「ムービー → 再生…」で開くと失敗の場面で止まります。`--junit` は JUnit XML を書きます。
+失敗すると、失敗したステップ・式・実際の値を表示し、その場面を再現する Repro（`repro.shgm` など）を書き出します。Repro は「記録 → 操作の再生 → 再生…」で開くと失敗の場面で止まります。`--junit` は JUnit XML を書きます。
 
 **お手本の画像**: 初めは `shogun run tests/title.yaml --update-golden` で今の画面からお手本を作り、内容を確かめてからリポジトリに含めます。一致しないときは `<お手本>.actual.png` に実際の画面を書きます。お手本は常に既定のパレットで書くため、パレットの設定を変えてもテストは壊れません。
 

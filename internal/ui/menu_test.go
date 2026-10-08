@@ -49,7 +49,8 @@ func TestMainMenuHasSpecifiedItems(t *testing.T) {
 		"実行":   {"一時停止", "コマ送り", "リセット", "ハードリセット", "速度", "巻き戻し"},
 		"ステート": {"クイックセーブ", "クイックロード", "スロットを選ぶ", "スロットの一覧…",
 			"名前を付けて保存…", "ファイルから読み込み…"},
-		"ムービー": {"記録を始める…", "記録を止める", "再生…", "停止"},
+		"記録": {"操作の記録", "操作の記録 > 開始…", "操作の記録 > 停止",
+			"操作の再生", "操作の再生 > 再生…", "操作の再生 > 停止", "録画"},
 		"表示": {"拡大率", "フルスクリーン", "パターンテーブル", "ネームテーブル", "スプライト", "パレット", "APU",
 			"CPU デバッガ", "メモリ（新しく開く）", "ログ", "ビューアの配置"},
 		"デバッグ": {"ブレークポイント一覧", "トレースの記録", "トレースの書き出し", "トレースの常時出力", "ログカテゴリ…",
@@ -64,6 +65,35 @@ func TestMainMenuHasSpecifiedItems(t *testing.T) {
 				t.Errorf("%s に %q が無い: %v", m.Label, w, labels)
 			}
 		}
+	}
+}
+
+// TestRecordMenuHasVideoItems は「記録」メニューの「録画」の子メニューに
+// 録画の開始・停止・書き出しが並ぶことを確かめる（設計書 10 編 §10.5）。
+func TestRecordMenuHasVideoItems(t *testing.T) {
+	test.NewApp()
+	u := newTestUI(t)
+
+	m := u.recordMenu()
+	if m.Label != "記録" {
+		t.Errorf("メニューの名前 = %q, 期待 記録", m.Label)
+	}
+	var vid *fyne.MenuItem
+	for _, item := range m.Items {
+		if item.Label == "録画" {
+			vid = item
+		}
+	}
+	if vid == nil || vid.ChildMenu == nil {
+		t.Fatalf("録画の子メニューが無い: %v", menuLabels(m))
+	}
+	var got []string
+	for _, c := range vid.ChildMenu.Items {
+		got = append(got, c.Label)
+	}
+	want := []string{"開始…", "停止", "操作の記録から書き出す…"}
+	if !slices.Equal(got, want) {
+		t.Errorf("録画の項目 = %v, 期待 %v", got, want)
 	}
 }
 
@@ -220,7 +250,7 @@ func TestStatusBarShowsSlotAndMovie(t *testing.T) {
 		Rewinding:  true,
 	}
 	text := b.text(s)
-	for _, want := range []string{"スロット 3", "録画中 120 フレーム", "巻き戻し中"} {
+	for _, want := range []string{"スロット 3", "操作を記録中 120 フレーム", "巻き戻し中"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("%q が無い: %s", want, text)
 		}

@@ -65,6 +65,7 @@ Phase 12 ── Phase 14  Agent Interface の基盤（JSON-RPC・Instance・Fork
 | [19](phase-19-agent-scenario.md) | Scenario とテスト実行（`shogun run`・アサーション・JUnit XML・`scenario.export`） | 合格で終了コード 0、失敗で終了コード 5 と JUnit XML と Repro を出し、`scenario.export` の Scenario を再実行して同じ結果になる | 完了 |
 | [20](phase-20-agent-analysis.md) | 解析（トレースの絞り込みと要約・プロファイル・Diagnostic） | Diagnostic 11 項目がテスト ROM で検知され、全機能を有効にしても決定論テストのハッシュが変わらず 60 fps を維持する | 完了 |
 | [21](phase-21-release-0.9.0.md) | リリース 0.9.0（アイコンの刷新・`.dmg` の改良・`.msi`・`.deb`・`.rpm`） | 新しいアイコンの各形式とアプリ内のロゴがそろい、`v0.9.0` のタグでリリースの下書きにすべての成果物が並ぶ | 進行中 |
+| [22](phase-22-video-recording.md) | 動画の書き出し（録画・操作の記録からの書き出し・`--record-video`）と「記録」メニュー | 3 つの経路で MP4 を書き出せ、録画しても状態のハッシュが変わらず、QuickTime Player で再生できる | 実装完了（録画・書き出し・CLI と全テストが合格。GUI の目視確認と QuickTime Player での再生の確認のみ未確認） |
 
 ## 進捗の更新方法
 

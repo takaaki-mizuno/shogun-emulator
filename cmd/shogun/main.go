@@ -14,6 +14,7 @@ import (
 	"github.com/takaakimizuno/shogun-emulator/internal/debug"
 	"github.com/takaakimizuno/shogun-emulator/internal/emu"
 	"github.com/takaakimizuno/shogun-emulator/internal/ui"
+	"github.com/takaakimizuno/shogun-emulator/internal/video"
 )
 
 func main() {
@@ -151,6 +152,39 @@ func emuConfig(cfg *config.Config, paths config.Paths, logOut io.Writer, stderr 
 	}
 }
 
+// recordPalette は録画に使うパレットを返す。設定のパレットを読めないときは
+// 既定のパレットを使う（画面の表示と同じ扱い）。
+func recordPalette(cfg *config.Config) *video.Palette {
+	if cfg.Video.PaletteFile != "" {
+		if p, err := video.LoadPaletteFile(cfg.Video.PaletteFile); err == nil {
+			return p
+		}
+	}
+	return video.DefaultPalette()
+}
+
+// videoOverscan は設定のオーバースキャンを返す。
+func videoOverscan(cfg *config.Config) video.Overscan {
+	v := cfg.Video
+	return video.Overscan{Top: v.OverscanTop, Bottom: v.OverscanBottom, Left: v.OverscanLeft, Right: v.OverscanRight}
+}
+
+// recordVideoDecision は GUI 起動時に --record-video を始めてよいかを判定する。
+//
+// ROM を指定していない、または読み込みに失敗しているときは、Emulator が
+// 始まっていない（StartRecordingVideo の apply が戻らない）ため録画を始め
+// ない。そのときは利用者へ理由を知らせる warning を返す（recordVideo が
+// 空のときは知らせる必要が無いので warning も空文字になる）。
+func recordVideoDecision(recordVideo string, romLoaded bool) (start bool, warning string) {
+	if recordVideo == "" {
+		return false, ""
+	}
+	if !romLoaded {
+		return false, fmt.Sprintf("%s: --record-video には ROM を指定して読み込む必要がある", appName)
+	}
+	return true, ""
+}
+
 // startGUI は画面を開き、閉じられるまで戻らない。
 func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Writer) {
 	cfg := store.Config()
@@ -170,6 +204,7 @@ func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Wri
 	if opts.speed != 0 {
 		u.SetSpeed(opts.speed)
 	}
+	romLoaded := false
 	if opts.romPath != "" {
 		// 画面を開く前に読み込む。読み込めないときは知らせて続ける。
 		// ROM を開けないことでアプリケーションが起動しない状態を作らない。
@@ -177,6 +212,7 @@ func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Wri
 		if err := e.LoadROM(opts.romPath); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
 		} else {
+			romLoaded = true
 			u.NotifyROMLoaded(opts.romPath)
 			applyStartupOptions(e, opts, stderr)
 			if opts.traceLog != "" {
@@ -188,6 +224,16 @@ func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Wri
 	}
 	if opts.debug {
 		u.OpenDebuggerOnStart()
+	}
+	// ROM を指定して読み込めたときだけ録画を始める。Emulator が始まって
+	// いない（e.Start() を呼んでいない）状態で StartRecordingVideo を呼ぶと
+	// apply が戻らずアプリケーションが起動しなくなる。
+	if start, warning := recordVideoDecision(opts.recordVideo, romLoaded); start {
+		if err := e.StartRecordingVideo(opts.recordVideo, recordPalette(cfg), cfg.Video.RecordScale, videoOverscan(cfg)); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+		}
+	} else if warning != "" {
+		fmt.Fprintln(stderr, warning)
 	}
 	u.Run()
 

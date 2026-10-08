@@ -10,6 +10,7 @@ import (
 	"github.com/takaakimizuno/shogun-emulator/internal/config"
 	"github.com/takaakimizuno/shogun-emulator/internal/emu/movie"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes/state"
+	"github.com/takaakimizuno/shogun-emulator/internal/video/mp4rec"
 )
 
 // writeLoopROM は画面を描かずに動き続ける NROM の ROM を書き、パスを返す。
@@ -127,6 +128,40 @@ func TestHeadlessDetectsDesync(t *testing.T) {
 		"--state-dir", dir, "--movie", moviePath, rom)
 	if code != exitOK {
 		t.Errorf("検証を切っても終了コードが %d である", code)
+	}
+}
+
+// TestHeadlessRecordsVideoFromMovie は --movie と --record-video でムービーの
+// 終わりまで録画することを確かめる（設計書 11 編 §11.5.2）。
+func TestHeadlessRecordsVideoFromMovie(t *testing.T) {
+	rom := writeLoopROM(t)
+	dir := t.TempDir()
+	moviePath := filepath.Join(dir, "test.movie")
+	if code, _, stderr := runCLI(t, "--headless", "--deterministic", "--frames", "40",
+		"--state-dir", dir, "--record-movie", moviePath, rom); code != exitOK {
+		t.Fatalf("記録の終了コード = %d（%s）", code, stderr)
+	}
+	data, _ := os.ReadFile(moviePath)
+	m, err := movie.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(dir, "out.mp4")
+	code, _, stderr := runCLI(t, "--headless", "--deterministic", "--state-dir", dir,
+		"--movie", moviePath, "--record-video", out, rom)
+	if code != exitOK {
+		t.Fatalf("録画の終了コード = %d（%s）", code, stderr)
+	}
+	info, err := mp4rec.Inspect(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uint64(info.VideoFrames) != m.Header.TotalFrames {
+		t.Errorf("フレーム数 = %d、ムービー %d", info.VideoFrames, m.Header.TotalFrames)
+	}
+	if info.Width != 512 {
+		t.Errorf("幅 = %d、既定の 2 倍（512）でない", info.Width)
 	}
 }
 

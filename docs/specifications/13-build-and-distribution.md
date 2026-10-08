@@ -262,7 +262,7 @@ OpenGL・X11・Wayland・PulseAudio・ALSA のライブラリは AppImage に収
 
 ## 13.8 CI
 
-`.github/workflows/ci.yml` はプッシュとプルリクエストで動く。
+`.github/workflows/ci.yml` は、`release.yml` から呼ばれたときと、Actions の画面から手で起動したとき（`workflow_dispatch`）に動く。ブランチへの push とプルリクエストでは動かさない。タグを打ったときに CI とリリースの両方が同じコミットで走ることを避けるためである。
 
 | ジョブ | 内容 |
 |---|---|
@@ -299,6 +299,7 @@ OpenGL・X11・Wayland・PulseAudio・ALSA のライブラリは AppImage に収
 | `fyne.io/fyne/v2` | GUI |
 | `github.com/ebitengine/oto/v3` | 音声出力 |
 | `github.com/ncruces/zenity` | ネイティブダイアログ |
+| `github.com/Eyevinn/mp4ff` | 動画（MP4）の書き出し（「08 セーブステートと入力ムービー設計」§8.8） |
 | `github.com/josephspurrier/goversioninfo` | Windows のリソース生成。ビルド時のみ |
 | `golang.org/x/sys` | Windows のコンソール接続 |
 | `golang.org/x/tools` | 静的検査。テスト時のみ |

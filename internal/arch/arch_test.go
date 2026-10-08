@@ -601,6 +601,27 @@ func TestAssetsHoldDataOnly(t *testing.T) {
 	}
 }
 
+// TestMP4FFOnlyInMP4Rec は mp4ff を参照するのが internal/video/mp4rec だけで
+// あることを検証する(設計書 01 編 §1.4)。
+//
+// m.matching は "pkg/..." の形のパターンを前提にしており、全パッケージを表す
+// パターンを持たないため、m.pkgs を直接たどる。p.Imports だけを見るのは、
+// _test.go からの参照を対象外とするためである(TestImports・XTestImports を
+// 含まない)。
+func TestMP4FFOnlyInMP4Rec(t *testing.T) {
+	m := loadModule(t)
+	for _, p := range m.pkgs {
+		if strings.HasSuffix(p.ImportPath, "internal/video/mp4rec") {
+			continue
+		}
+		for _, imp := range p.Imports {
+			if strings.HasPrefix(imp, "github.com/Eyevinn/mp4ff") {
+				t.Errorf("%s が %s を参照している(internal/video/mp4rec に閉じる)", p.ImportPath, imp)
+			}
+		}
+	}
+}
+
 // TestDependencyDirection は依存が上から下への一方向であることを検証する。
 // 設計書 01 編 §1.4。
 func TestDependencyDirection(t *testing.T) {

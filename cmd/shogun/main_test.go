@@ -55,7 +55,7 @@ func TestHelpListsAllOptions(t *testing.T) {
 	for _, want := range []string{"表示と音声:", "保存先:", "ステートとムービー:", "決定論:", "デバッグ:", "headless:",
 		"--help", "--version", "--config", "--portable", "--region", "--scale", "--fullscreen", "--no-audio",
 		"--audio-buffer", "--sample-rate", "--speed", "--save-dir", "--state-dir", "--load-state",
-		"--save-state-on-exit", "--movie", "--record-movie", "--movie-verify", "--no-movie-verify",
+		"--save-state-on-exit", "--movie", "--record-movie", "--record-video", "--movie-verify", "--no-movie-verify",
 		"--ram-init", "--ram-seed", "--deterministic", "--debug", "--log", "--log-dir", "--log-categories",
 		"--trace-log", "--break-at", "--headless", "--frames", "--screenshot"} {
 		if !strings.Contains(out, want) {
@@ -119,5 +119,24 @@ func TestGUIOptionsOverride(t *testing.T) {
 	addrs, err := parseBreakAddrs(opts.breakAt)
 	if err != nil || len(addrs) != 2 || addrs[0] != 0xC000 || addrs[1] != 0x8000 {
 		t.Errorf("ブレークのアドレス = %v, %v", addrs, err)
+	}
+}
+
+// TestRecordVideoDecision は GUI 起動時に --record-video を始めてよいかの
+// 判定を確かめる。ROM を指定していない、または読み込みに失敗したときは
+// 始めない（Emulator が始まっていない状態で StartRecordingVideo を呼ぶと
+// 戻らずアプリケーションが起動しなくなるため）。
+func TestRecordVideoDecision(t *testing.T) {
+	if start, warning := recordVideoDecision("", false); start || warning != "" {
+		t.Errorf("--record-video を指定していないのに start=%v warning=%q", start, warning)
+	}
+	if start, warning := recordVideoDecision("", true); start || warning != "" {
+		t.Errorf("--record-video を指定していないのに start=%v warning=%q", start, warning)
+	}
+	if start, warning := recordVideoDecision("out.mp4", false); start || warning == "" {
+		t.Errorf("ROM が無いのに start=%v warning=%q", start, warning)
+	}
+	if start, warning := recordVideoDecision("out.mp4", true); !start || warning != "" {
+		t.Errorf("ROM を読み込んでいるのに start=%v warning=%q", start, warning)
 	}
 }

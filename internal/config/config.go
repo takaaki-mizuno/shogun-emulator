@@ -49,6 +49,8 @@ type VideoConfig struct {
 	OverscanRight         int    `json:"overscanRight"`
 	PaletteFile           string `json:"paletteFile"`
 	Fullscreen            bool   `json:"fullscreen"`
+	// RecordScale は録画の拡大率（設計書 08 編 §8.8.1）。
+	RecordScale int `json:"recordScale"`
 }
 
 // AudioConfig は音声出力の設定。
@@ -81,6 +83,7 @@ type PathsConfig struct {
 	ScreenshotDir string `json:"screenshotDir"`
 	LogDir        string `json:"logDir"`
 	MovieDir      string `json:"movieDir"`
+	VideoDir      string `json:"videoDir"`
 }
 
 // DebugConfig はデバッグ出力の設定。
@@ -209,6 +212,12 @@ const (
 	MaxScale = 8
 )
 
+// 録画の拡大率の範囲（設計書 11 編 §11.3.1）。
+const (
+	MinRecordScale = 1
+	MaxRecordScale = 3
+)
+
 // MaxOverscan は上下左右それぞれで隠せる最大のピクセル数。
 const MaxOverscan = 16
 
@@ -245,6 +254,7 @@ func Default() *Config {
 			Filter:         FilterNearest,
 			OverscanTop:    8,
 			OverscanBottom: 8,
+			RecordScale:    2,
 		},
 		Audio: AudioConfig{
 			Enabled:                 true,

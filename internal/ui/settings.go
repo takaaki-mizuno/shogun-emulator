@@ -318,6 +318,9 @@ func (f *settingsForm) videoItems() []fyne.CanvasObject {
 		f.intField(i18n.T(i18n.MenuScale), i18n.T(i18n.SetScaleDesc), config.MinScale, config.MaxScale,
 			func() int { return v.Scale }, func(n int) { v.Scale = n },
 			func(c *config.Config) any { return c.Video.Scale }),
+		f.intField(i18n.T(i18n.SetRecordScale), i18n.T(i18n.SetRecordScaleDesc), config.MinRecordScale, config.MaxRecordScale,
+			func() int { return v.RecordScale }, func(n int) { v.RecordScale = n },
+			func(c *config.Config) any { return c.Video.RecordScale }),
 		f.check(i18n.T(i18n.SetIntegerScale), i18n.T(i18n.SetIntegerScaleDesc),
 			func() bool { return v.IntegerScale }, func(b bool) { v.IntegerScale = b },
 			func(c *config.Config) any { return c.Video.IntegerScale }),
@@ -402,6 +405,7 @@ func (f *settingsForm) pathItems() []fyne.CanvasObject {
 		field(i18n.T(i18n.SetPathSave), &p.SaveDir, func(c *config.Config) any { return c.Paths.SaveDir }),
 		field(i18n.T(i18n.SetPathState), &p.StateDir, func(c *config.Config) any { return c.Paths.StateDir }),
 		field(i18n.T(i18n.SetPathScreenshot), &p.ScreenshotDir, func(c *config.Config) any { return c.Paths.ScreenshotDir }),
+		field(i18n.T(i18n.SetPathVideo), &p.VideoDir, func(c *config.Config) any { return c.Paths.VideoDir }),
 		field(i18n.T(i18n.ViewerLog), &p.LogDir, func(c *config.Config) any { return c.Paths.LogDir }),
 		field(i18n.T(i18n.SetPathMovie), &p.MovieDir, func(c *config.Config) any { return c.Paths.MovieDir }),
 	}

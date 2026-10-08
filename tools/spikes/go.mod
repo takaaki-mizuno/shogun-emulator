@@ -6,6 +6,7 @@ go 1.25.0
 
 require (
 	fyne.io/fyne/v2 v2.8.1
+	github.com/Eyevinn/mp4ff v0.59.0
 	github.com/ebitengine/oto/v3 v3.5.1
 )
 

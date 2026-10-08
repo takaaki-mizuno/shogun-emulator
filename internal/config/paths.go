@@ -46,11 +46,12 @@ type Paths struct {
 	Cache       string
 	Logs        string
 	Screenshots string
+	Videos      string // 録画した動画
 }
 
 // Overrides は環境変数と引数で指定された保存先。空の項目は既定の場所を使う。
 type Overrides struct {
-	Config, Data, Logs, Screenshots string
+	Config, Data, Logs, Screenshots, Videos string
 }
 
 // platform は保存先の決定に使う OS の情報。テストで差し替える。
@@ -128,6 +129,9 @@ func resolvePaths(pf platform, portable bool, o Overrides, create bool) (Paths, 
 	if o.Screenshots != "" {
 		p.Screenshots = o.Screenshots
 	}
+	if o.Videos != "" {
+		p.Videos = o.Videos
+	}
 	if create {
 		for _, dir := range []string{p.Config, p.Data, p.Logs} {
 			if err := pf.mkdirAll(dir, 0o755); err != nil {
@@ -150,6 +154,7 @@ func portablePaths(pf platform) (Paths, error) {
 		Cache:       filepath.Join(dir, "cache"),
 		Logs:        filepath.Join(dir, "logs"),
 		Screenshots: filepath.Join(dir, "screenshots"),
+		Videos:      filepath.Join(dir, "videos"),
 	}, nil
 }
 
@@ -226,8 +231,14 @@ func standardPaths(pf platform) (Paths, error) {
 	}
 	if homeErr == nil {
 		p.Screenshots = filepath.Join(home, "Pictures", AppDirName)
+		movies := "Videos"
+		if pf.goos == "darwin" {
+			movies = "Movies"
+		}
+		p.Videos = filepath.Join(home, movies, AppDirName)
 	} else {
 		p.Screenshots = filepath.Join(p.Data, "screenshots")
+		p.Videos = filepath.Join(p.Data, "videos")
 	}
 	return p, nil
 }
@@ -278,6 +289,14 @@ func (p Paths) ScreenshotDir(override string) string {
 		return override
 	}
 	return p.Screenshots
+}
+
+// VideoDir は録画した動画の保存先を返す。
+func (p Paths) VideoDir(override string) string {
+	if override != "" {
+		return override
+	}
+	return p.Videos
 }
 
 // LogDir はログファイルの保存先を返す。

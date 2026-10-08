@@ -1,11 +1,9 @@
 name: CI
 
+# ブランチへの push とプルリクエストでは動かさない。タグのリリース（release.yml）
+# から成果物を作る前のテストとして呼ばれるほか、Actions の画面から手で動かせる。
 on:
-  push:
-    branches: ["**"]
-  pull_request:
   workflow_dispatch:
-  # タグのリリース（release.yml）から、成果物を作る前のテストとして呼ばれる
   workflow_call:
 
 permissions:
@@ -44,7 +42,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
-            libxinerama-dev libxxf86vm-dev xorg-dev p7zip-full
+            libxinerama-dev libxxf86vm-dev xorg-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols libasound2-dev p7zip-full
 
       # holy-mapperel の書庫を展開するために 7z を使う
       - name: macOS の依存パッケージを導入する
@@ -159,7 +158,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev \
-            libxinerama-dev libxxf86vm-dev xorg-dev
+            libxinerama-dev libxxf86vm-dev xorg-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols libasound2-dev
 
       - name: ビルド
         shell: bash

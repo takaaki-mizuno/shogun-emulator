@@ -18,7 +18,7 @@ Shogun Emulator is an NES (Famicom) emulator for macOS, Windows, and Linux, writ
 |---|---|
 | Regions | NTSC, PAL, Dendy (detected automatically from the ROM header) |
 | Mappers | NROM (0), MMC1 (1), UxROM (2), CNROM (3), MMC3 (4), AxROM (7), GxROM (66) |
-| Play | Save states with slots, rewind, fast-forward, slow motion, frame advance, input movie recording and playback, screenshots |
+| Play | Save states with slots, rewind, fast-forward, slow motion, frame advance, input movie recording and playback, screenshots, video recording to MP4 (Motion JPEG and PCM) |
 | Debugging | CPU debugger, breakpoints, step by cycle, instruction, scanline, or frame, memory viewer and editor, PPU and APU viewers, CPU trace log, ca65/ld65 `.dbg` symbols |
 | Automation | Headless mode, MCP server (`shogun mcp`), JSON-RPC server (`shogun serve`), scenario runner (`shogun run`) |
 
@@ -40,7 +40,7 @@ Requirements:
 
 - Go 1.25 or later
 - A C compiler (cgo is required by the GUI toolkit [Fyne](https://fyne.io/))
-- Linux only: `libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev xorg-dev`
+- Linux only: `libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols libasound2-dev`
 
 ```sh
 go build ./cmd/shogun
@@ -140,7 +140,7 @@ AI エージェントなどのプログラムからも、Agent Interface（MCP �
 |---|---|
 | リージョン | NTSC・PAL・Dendy（ROM のヘッダから自動で判別） |
 | マッパー | NROM（0）、MMC1（1）、UxROM（2）、CNROM（3）、MMC3（4）、AxROM（7）、GxROM（66） |
-| プレイ | スロット付きのセーブステート、巻き戻し、早送り、スロー、コマ送り、入力ムービーの記録と再生、スクリーンショット |
+| プレイ | スロット付きのセーブステート、巻き戻し、早送り、スロー、コマ送り、入力ムービーの記録と再生、スクリーンショット、動画（MP4）の録画 |
 | デバッグ | CPU デバッガ、ブレークポイント、サイクル・命令・スキャンライン・フレーム単位のステップ実行、メモリビューアとエディタ、PPU と APU のビューア、CPU トレースログ、ca65/ld65 の `.dbg` のシンボル |
 | 自動化 | headless モード、MCP サーバ（`shogun mcp`）、JSON-RPC サーバ（`shogun serve`）、Scenario の実行（`shogun run`） |
 
@@ -162,7 +162,7 @@ AI エージェントなどのプログラムからも、Agent Interface（MCP �
 
 - Go 1.25 以降
 - C コンパイラ（GUI ツールキットの [Fyne](https://fyne.io/) が cgo を使うため）
-- Linux のみ: `libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev xorg-dev`
+- Linux のみ: `libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols libasound2-dev`
 
 ```sh
 go build ./cmd/shogun

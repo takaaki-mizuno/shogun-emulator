@@ -47,6 +47,7 @@ func TestStandardPathsPerOS(t *testing.T) {
 			Cache:       j("/Users/u/Library/Caches", "ShogunEmulator"),
 			Logs:        j("/Users/u", "Library", "Logs", "ShogunEmulator"),
 			Screenshots: j("/Users/u", "Pictures", "ShogunEmulator"),
+			Videos:      j("/Users/u", "Movies", "ShogunEmulator"),
 		}},
 		{"windows", nil, Paths{
 			Config:      j(`C:\Users\u\AppData\Roaming`, "ShogunEmulator"),
@@ -54,6 +55,7 @@ func TestStandardPathsPerOS(t *testing.T) {
 			Cache:       j(`C:\Users\u\AppData\Local`, "ShogunEmulator", "cache"),
 			Logs:        j(`C:\Users\u\AppData\Local`, "ShogunEmulator", "logs"),
 			Screenshots: j(`C:\Users\u`, "Pictures", "ShogunEmulator"),
+			Videos:      j(`C:\Users\u`, "Videos", "ShogunEmulator"),
 		}},
 		{"linux", nil, Paths{
 			Config:      j("/home/u/.config", "shogun-emulator"),
@@ -61,6 +63,7 @@ func TestStandardPathsPerOS(t *testing.T) {
 			Cache:       j("/home/u/.cache", "shogun-emulator"),
 			Logs:        j("/home/u", ".local", "state", "shogun-emulator", "logs"),
 			Screenshots: j("/home/u", "Pictures", "ShogunEmulator"),
+			Videos:      j("/home/u", "Videos", "ShogunEmulator"),
 		}},
 		{"linux", map[string]string{"XDG_DATA_HOME": "/xdg/data", "XDG_STATE_HOME": "/xdg/state"}, Paths{
 			Config:      j("/home/u/.config", "shogun-emulator"),
@@ -68,6 +71,7 @@ func TestStandardPathsPerOS(t *testing.T) {
 			Cache:       j("/home/u/.cache", "shogun-emulator"),
 			Logs:        j("/xdg/state", "shogun-emulator", "logs"),
 			Screenshots: j("/home/u", "Pictures", "ShogunEmulator"),
+			Videos:      j("/home/u", "Videos", "ShogunEmulator"),
 		}},
 	}
 	for _, c := range cases {
@@ -89,7 +93,8 @@ func TestPortableAndOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Paths{Config: "/opt/shogun", Data: "/opt/shogun", Cache: filepath.Join("/opt/shogun", "cache"),
-		Logs: "/tmp/logs", Screenshots: filepath.Join("/opt/shogun", "screenshots")}
+		Logs: "/tmp/logs", Screenshots: filepath.Join("/opt/shogun", "screenshots"),
+		Videos: filepath.Join("/opt/shogun", "videos")}
 	if got != want {
 		t.Errorf("実際 %+v\n期待 %+v", got, want)
 	}
@@ -98,6 +103,12 @@ func TestPortableAndOverrides(t *testing.T) {
 	}
 	if d := got.SaveDir("/x"); d != "/x" {
 		t.Errorf("上書きしたセーブの保存先 = %s", d)
+	}
+	if d := got.VideoDir(""); d != filepath.Join("/opt/shogun", "videos") {
+		t.Errorf("動画の保存先 = %s", d)
+	}
+	if d := got.VideoDir("/v"); d != "/v" {
+		t.Errorf("上書きした動画の保存先 = %s", d)
 	}
 }
 

@@ -106,6 +106,8 @@ type Status struct {
 	Slot int
 	// Movie はムービーの記録・再生の状態。
 	Movie MovieStatus
+	// Video は録画の状態（設計書 08 編 §8.8.4）。
+	Video VideoStatus
 	// Rewinding は巻き戻し中かを表す。
 	Rewinding bool
 	// Break は直近にブレークポイントで止まった理由。止まっていないとき空。
@@ -201,6 +203,12 @@ type Emulator struct {
 	latch frameLatch
 	// recorder はムービーの記録。記録していないとき nil。
 	recorder *movie.Recorder
+	// video は録画（設計書 08 編 §8.8）。nil のとき録画していない。
+	video *videoRecorder
+	// videoErr は書き込みの失敗で録画が止まったときのエラー。次の
+	// StopRecordingVideo で返して消す。次に録画を始めたときも消す。
+	// エミュレーションゴルーチンだけが触る。
+	videoErr error
 	// recordPath は記録の書き出し先。
 	recordPath string
 	// player はムービーの再生。再生していないとき nil。

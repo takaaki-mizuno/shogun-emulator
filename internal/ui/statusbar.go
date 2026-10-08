@@ -116,6 +116,7 @@ func (b *statusBar) text(s emu.Status) string {
 		sb.WriteString(" │ ")
 		sb.WriteString(t)
 	}
+	sb.WriteString(videoText(s))
 	if s.Rewinding {
 		sb.WriteString(i18n.T(i18n.StatusRewinding))
 	}
@@ -193,4 +194,14 @@ func movieText(s emu.Status) string {
 		return i18n.T(i18n.StatusPlaying, s.Movie.Frame, s.Movie.Total)
 	}
 	return ""
+}
+
+// videoText は録画中の経過時間を返す。録画していないとき空。
+func videoText(s emu.Status) string {
+	v := s.Video
+	if !v.Recording || v.FrameRate <= 0 {
+		return ""
+	}
+	sec := int(float64(v.Frames) / v.FrameRate)
+	return i18n.T(i18n.StatusVideoRecording, sec/60, sec%60)
 }

@@ -15,36 +15,21 @@ import (
 //
 // PlayMovie は再生を始めると一時停止を解く。その後に SetPaused(true) を
 // 送ると、届くまでの間にエミュレーションが進むフレーム数が実行のたびに
-// 変わる。エミュレーションゴルーチンの中で続けて止めることで、再生の開始の
-// 位置から runFrames で進めた分だけを進める。
+// 変わる。playMoviePaused がエミュレーションゴルーチンの中で続けて
+// 止めることで、再生の開始の位置から runFrames で進めた分だけを進める。
 func playPaused(t *testing.T, e *Emulator, m *movie.Movie) {
 	t.Helper()
-	var err error
-	if !e.WithMachine(func(*nes.NES) {
-		if err = e.startPlayback(m); err == nil {
-			e.paused = true
-			e.setPaused(true)
-		}
-	}) {
-		t.Fatal("本体を参照できない")
-	}
-	if err != nil {
+	if err := e.playMoviePaused(m); err != nil {
 		t.Fatalf("再生を始められない: %v", err)
 	}
 }
 
-// playFilePaused はファイルのムービーを playPaused で再生する。
+// playFilePaused はファイルのムービーを PlayMovieFilePaused で再生する。
 func playFilePaused(t *testing.T, e *Emulator, path string) {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	if err := e.PlayMovieFilePaused(path); err != nil {
+		t.Fatalf("再生を始められない: %v", err)
 	}
-	m, err := movie.Decode(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	playPaused(t, e, m)
 }
 
 // recordSession は入力を変えながらムービーを記録し、最後の状態の

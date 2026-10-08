@@ -3,6 +3,7 @@ package emu
 import (
 	"github.com/takaakimizuno/shogun-emulator/internal/emu/movie"
 	"github.com/takaakimizuno/shogun-emulator/internal/nes"
+	"github.com/takaakimizuno/shogun-emulator/internal/video"
 )
 
 // command は外部からエミュレーションゴルーチンへ渡す要求。
@@ -122,6 +123,21 @@ type cmdPlayMovie struct {
 // cmdStopMovie はムービーの記録と再生を止める。
 type cmdStopMovie struct{ done chan error }
 
+// cmdStartVideo は録画を始める（設計書 08 編 §8.8.4）。
+type cmdStartVideo struct {
+	path     string
+	pal      *video.Palette
+	scale    int
+	overscan video.Overscan
+	done     chan error
+}
+
+// cmdStopVideo は録画を止める。abort のときはファイルを消す。
+type cmdStopVideo struct {
+	abort bool
+	done  chan error
+}
+
 // cmdSetRewinding は押している間の巻き戻しを切り替える。
 type cmdSetRewinding struct{ on bool }
 
@@ -151,6 +167,8 @@ func (cmdStopRecording) isCommand()  {}
 func (cmdPlayMovie) isCommand()      {}
 func (cmdStopMovie) isCommand()      {}
 func (cmdSetRewinding) isCommand()   {}
+func (cmdStartVideo) isCommand()     {}
+func (cmdStopVideo) isCommand()      {}
 
 // commandDone は完了を伝えるチャネルを返す。持たないコマンドでは nil。
 //
@@ -177,6 +195,10 @@ func commandDone(c command) chan error {
 	case cmdStopMovie:
 		return v.done
 	case cmdReplay:
+		return v.done
+	case cmdStartVideo:
+		return v.done
+	case cmdStopVideo:
 		return v.done
 	}
 	return nil

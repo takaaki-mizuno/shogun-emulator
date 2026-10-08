@@ -175,6 +175,7 @@ func TestDefaultConfigValues(t *testing.T) {
 		{"video.overscanTop", c.Video.OverscanTop, 8},
 		{"video.overscanBottom", c.Video.OverscanBottom, 8},
 		{"video.overscanLeft", c.Video.OverscanLeft, 0},
+		{"video.recordScale", c.Video.RecordScale, 2},
 		{"audio.sampleRate", c.Audio.SampleRate, 48000},
 		{"audio.bufferMilliseconds", c.Audio.BufferMilliseconds, 25},
 		{"audio.ringHighWaterMultiplier", c.Audio.RingHighWaterMultiplier, 2},
@@ -190,6 +191,20 @@ func TestDefaultConfigValues(t *testing.T) {
 		if tt.got != tt.want {
 			t.Errorf("%s = %v, 期待 %v", tt.name, tt.got, tt.want)
 		}
+	}
+}
+
+// TestRecordScaleDefaultAndRange は録画の拡大率の既定値と、範囲外の値が
+// 既定値に戻ることを確かめる（設計書 11 編 §11.3.1）。
+func TestRecordScaleDefaultAndRange(t *testing.T) {
+	c := Default()
+	if c.Video.RecordScale != 2 {
+		t.Errorf("既定の録画の倍率 = %d", c.Video.RecordScale)
+	}
+	c.Video.RecordScale = 9
+	c.Validate()
+	if c.Video.RecordScale != 2 {
+		t.Errorf("範囲外の倍率が既定に戻らない: %d", c.Video.RecordScale)
 	}
 }
 
