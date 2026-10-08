@@ -23,8 +23,8 @@ func TestHeadlessVideoWriteFailureExitCode(t *testing.T) {
 		if code != exitROMError {
 			t.Errorf("終了コード = %d、期待 %d（%s）", code, exitROMError, stderr)
 		}
-		if !strings.Contains(stderr, "file too large") && !strings.Contains(stderr, "too large") {
-			t.Errorf("書き込みの失敗が標準エラーに出ていない: %q", stderr)
+		if n := strings.Count(stderr, "too large"); n != 1 {
+			t.Errorf("書き込みの失敗が標準エラーに %d 回出ている（期待 1 回）: %q", n, stderr)
 		}
 		if _, err := os.Stat(out); !os.IsNotExist(err) {
 			t.Error("書きかけのファイルが残っている")

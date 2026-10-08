@@ -64,7 +64,7 @@ type Host struct {
 	conns     []*Conn
 	nextConn  ConnID
 	closed    bool
-	// saveDir は headless の Instance のバッテリーバックアップの保存先。
+	// saveDir は headless の Instance が使う一時ディレクトリ（workDir）。
 	// Host ごとの一時ディレクトリで、Close で消す。
 	saveDir string
 }
@@ -382,11 +382,13 @@ func (h *Host) newEmulator(o InstanceOptions) (*emu.Emulator, error) {
 	cfg.LoadSymbols = h.loadSymbols
 	// 利用者のセーブデータを読み書きしない。読むと結果がセーブデータに
 	// 依存して再現できなくなり、書くと利用者のセーブデータを上書きする。
-	dir, err := h.batteryDir()
+	// オーバーレイは利用者のものの写しを読み、書き戻さない（設計書 14 編）。
+	dir, err := h.workDir(cfg)
 	if err != nil {
 		return nil, Errorf(KindIOError, "保存先を作れない: %v", err)
 	}
-	cfg.Paths.SaveDir = dir
+	cfg.Paths.SaveDir = filepath.Join(dir, workSavesDir)
+	cfg.PatchesDir = filepath.Join(dir, workPatchesDir)
 	if o.Deterministic {
 		config.ApplyDeterministic(&cfg.Emulation)
 	}
@@ -409,18 +411,39 @@ func (h *Host) newEmulator(o InstanceOptions) (*emu.Emulator, error) {
 	return e, nil
 }
 
-// batteryDir は headless の Instance のバッテリーバックアップの保存先を返す。
-func (h *Host) batteryDir() (string, error) {
+// Host の一時ディレクトリの下の、headless の Instance が使う保存先。
+const (
+	workSavesDir   = "saves"
+	workPatchesDir = "patches"
+)
+
+// workDir は headless の Instance が使う Host ごとの一時ディレクトリを返す。
+//
+// 最初に呼ばれたときに作り、バッテリーバックアップの保存先（saves）と、
+// 利用者のオーバーレイを写した保存先（patches）を置く。Host を閉じるときに消す。
+func (h *Host) workDir(cfg emu.Config) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.saveDir == "" {
-		dir, err := os.MkdirTemp("", "shogun-agent-saves-")
-		if err != nil {
+	if h.saveDir != "" {
+		return h.saveDir, nil
+	}
+	dir, err := os.MkdirTemp("", "shogun-agent-")
+	if err != nil {
+		return "", err
+	}
+	for _, sub := range []string{workSavesDir, workPatchesDir} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			os.RemoveAll(dir)
 			return "", err
 		}
-		h.saveDir = dir
 	}
-	return h.saveDir, nil
+	src := cfg.Dirs.PatchesDir(cfg.PatchesDir)
+	if err := emu.CopyPatchesDir(src, filepath.Join(dir, workPatchesDir)); err != nil {
+		os.RemoveAll(dir)
+		return "", err
+	}
+	h.saveDir = dir
+	return dir, nil
 }
 
 // loadSymbols は ROM ごとの Symbols を共有する。

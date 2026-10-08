@@ -56,7 +56,7 @@ func (e *Emulator) ExportVideo(ctx context.Context, x VideoExport) error {
 	if err := os.MkdirAll(patchesDir, 0o755); err != nil {
 		return err
 	}
-	if err := copyPatchesDir(e.cfg.Dirs.PatchesDir(e.cfg.PatchesDir), patchesDir); err != nil {
+	if err := CopyPatchesDir(e.cfg.Dirs.PatchesDir(e.cfg.PatchesDir), patchesDir); err != nil {
 		return err
 	}
 	cfg.PatchesDir = patchesDir
@@ -110,11 +110,12 @@ func (e *Emulator) ExportVideo(ctx context.Context, x VideoExport) error {
 	return child.StopRecordingVideo()
 }
 
-// copyPatchesDir は src の直下にある通常ファイルだけを dst へ複製する。
+// CopyPatchesDir は src の直下にある通常ファイルだけを dst へ複製する。
 // オーバーレイの保存先を隔離するときに、既存のオーバーレイを子
-// Emulator が読み込めるようにするために使う。src が無いときは何もしない
+// Emulator（動画の書き出しと Agent Interface の headless の Instance）が
+// 読み込めるようにするために使う。src が無いときは何もしない
 // （複製先を空のままにする）。
-func copyPatchesDir(src, dst string) error {
+func CopyPatchesDir(src, dst string) error {
 	entries, err := os.ReadDir(src)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

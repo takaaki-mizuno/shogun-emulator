@@ -180,6 +180,8 @@ headless の Instance はオーディオデバイスを開かず、`NoPacer` で
 
 headless の Instance は利用者のバッテリーバックアップ（`saves/<rom-hash>.sav`）を読み書きしない。Host ごとの一時ディレクトリを保存先とし、Host を閉じるときに消す。読むと結果がセーブデータに依存して再現できなくなり、書くと利用者のセーブデータを上書きするためである。
 
+CHR と PRG のオーバーレイ（`patches/<rom-hash>.json`、「09 デバッガ設計」）は、利用者のものを読むが書き戻さない。Host の一時ディレクトリの `patches/` へ、最初の Instance を作るときに利用者の保存先の中身を写し、それを保存先とする。利用者がオーバーレイを当てて作った状態を AI も同じ画で観測でき、Instance を閉じるときの保存で利用者のファイルを作る・上書きする・消すことがない。
+
 同じ ROM を読み込んだ Instance は、`emu.Config.LoadSymbols` を通して 1 つの `*debug.Symbols` を共有する。別々に読むと、終了時に同じシンボルファイルを互いの内容で上書きし合うためである。現在の `debug.Symbols` はウォッチと保存するブレークポイントも持つ。Instance ごとに分けるのは Symbol の再構成（§14.11、フェーズ 16）で行う。
 
 Agent Command の引数 `instance` を省略したとき、Instance が 1 つだけならそれを対象とする。2 つ以上あるときはエラー `instance_required` を返す。

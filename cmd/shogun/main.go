@@ -231,6 +231,9 @@ func startGUI(store *config.Store, opts options, logOut io.Writer, stderr io.Wri
 	if start, warning := recordVideoDecision(opts.recordVideo, romLoaded); start {
 		if err := e.StartRecordingVideo(opts.recordVideo, recordPalette(cfg), cfg.Video.RecordScale, videoOverscan(cfg)); err != nil {
 			fmt.Fprintf(stderr, "%s: %v\n", appName, err)
+		} else {
+			// 保存と途中の失敗を、メニューから始めた録画と同じく画面に出す。
+			u.NotifyVideoRecording(opts.recordVideo)
 		}
 	} else if warning != "" {
 		fmt.Fprintln(stderr, warning)

@@ -64,6 +64,32 @@ func TestNoteVideoClosedClearsStalePath(t *testing.T) {
 	}
 }
 
+// TestNoteVideoClosedAfterFailure は、書き込みの失敗で止まった直後に ROM を
+// 閉じる・開き直したとき（refresh が気付く前）も、保存したと知らせずに
+// 録画中のパスを消すことを確かめる。
+func TestNoteVideoClosedAfterFailure(t *testing.T) {
+	u := newTestUI(t)
+	u.videoPath = "/movies/game.mp4"
+	u.noteVideoClosed(emu.Status{Video: emu.VideoStatus{Error: "書けない"}})
+	if u.videoPath != "" {
+		t.Errorf("パスが残っている: %q", u.videoPath)
+	}
+	if strings.Contains(u.status.message, "game.mp4") {
+		t.Errorf("失敗したのに保存を知らせた: %q", u.status.message)
+	}
+}
+
+// TestNotifyVideoRecording は起動時の --record-video で始めた録画のパスを
+// 受け取り、閉じたときに保存を知らせることを確かめる。
+func TestNotifyVideoRecording(t *testing.T) {
+	u := newTestUI(t)
+	u.NotifyVideoRecording("/movies/cli.mp4")
+	u.noteVideoClosed(emu.Status{})
+	if !strings.Contains(u.status.message, "cli.mp4") {
+		t.Errorf("保存の知らせが無い: %q", u.status.message)
+	}
+}
+
 // TestVideoStoppedByFailure は書き込みの失敗で録画が止まったことに refresh が
 // 気付いたとき、エラーを出すこと、失敗でなければ黙ってパスを忘れることを
 // 確かめる（設計書 08 編 §8.8.3）。

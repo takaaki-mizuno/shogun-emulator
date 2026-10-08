@@ -115,9 +115,10 @@ func (e *Emulator) recordFrame(f *video.Frame) {
 	// Writer は受け取った PCM を自分の領域へ写すため、同じ配列を使い回せる。
 	e.video.pcm = e.video.pcm[:0]
 	if err := e.video.w.WriteFrame(f, pcm); err != nil {
+		// 失敗は Status.Video.Error と StopRecordingVideo の戻り値で伝える。
+		// ここで警告としても出すと、headless では同じ文言が 2 回出る。
 		e.videoErr = err
-		e.notifyError(e.closeVideo(true))
-		e.notifyError(err)
+		_ = e.closeVideo(true) // 中止は常に nil を返す
 		return
 	}
 	e.setVideoStatus()

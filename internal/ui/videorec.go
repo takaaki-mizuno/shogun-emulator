@@ -70,8 +70,21 @@ func (u *UI) noteVideoClosed(s emu.Status) {
 	if u.videoPath == "" || s.Video.Recording {
 		return
 	}
+	if s.Video.Error != "" {
+		// 書き込みに失敗して止まっていた。refresh より先にここへ来た場合も、
+		// 保存したとは知らせずエラーを出す。
+		u.showError(u.videoStopped(s))
+		return
+	}
 	u.status.notify(i18n.T(i18n.StatusVideoSaved, filepath.Base(u.videoPath)))
 	u.videoPath = ""
+}
+
+// NotifyVideoRecording は UI の外（起動時の --record-video）で始めた録画の
+// パスを知らせる。録画の保存と失敗を、メニューから始めた録画と同じく画面に
+// 出すために使う。Run の前に呼ぶ。
+func (u *UI) NotifyVideoRecording(path string) {
+	u.videoPath = path
 }
 
 // videoStopped は refresh が録画の終わりに気付いたときに呼ぶ。録画を始めて
